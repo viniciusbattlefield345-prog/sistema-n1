@@ -20,8 +20,27 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "N1 Restaurante e Choperia",
-  description: "Sistema de pedidos e delivery",
+  // Sem metadataBase o Next monta a URL da imagem como caminho relativo,
+  // e o WhatsApp não consegue buscar — cai no ícone padrão.
+  metadataBase: new URL("https://arinete.vercel.app"),
+  title: "N°1 Restaurante e Choperia",
+  description: "Estação do Chopp · Atílio Vivacqua/ES",
+  openGraph: {
+    type: "website",
+    locale: "pt_BR",
+    siteName: "N°1 Restaurante e Choperia",
+    title: "N°1 Restaurante e Choperia",
+    description: "Estação do Chopp · Atílio Vivacqua/ES",
+    url: "/",
+    images: [
+      {
+        url: "/logo.jpg",
+        width: 720,
+        height: 720,
+        alt: "N°1 Restaurante e Choperia",
+      },
+    ],
+  },
 };
 
 export const viewport: Viewport = {
