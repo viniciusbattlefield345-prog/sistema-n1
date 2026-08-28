@@ -23,18 +23,20 @@ export function FormularioLogin({ destino }: { destino: string }) {
       <input type="hidden" name="voltar" value={destino} />
 
       <div>
-        <label className="rotulo" htmlFor="email">
-          E-mail
+        <label className="rotulo" htmlFor="usuario">
+          Usuário
         </label>
         <input
-          id="email"
-          name="email"
-          type="email"
+          id="usuario"
+          name="usuario"
+          type="text"
           autoComplete="username"
+          autoCapitalize="none"
+          spellCheck={false}
           required
           autoFocus
           className="campo"
-          placeholder="voce@n1restaurante.com"
+          placeholder="arinete"
         />
       </div>
 
