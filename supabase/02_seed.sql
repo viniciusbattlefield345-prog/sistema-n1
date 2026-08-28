@@ -6,7 +6,7 @@
 -- Dados do estabelecimento (saem no cupom e no cabecalho do sistema)
 insert into configuracoes (chave, valor) values
 ('restaurante', jsonb_build_object(
-  'nome',      'N1 RESTAURANTE E CHOPERIA',
+  'nome',      'RESTAURANTE E CHOPERIA',
   'slogan',    'Estacao do Chopp',
   'endereco',  'Rua Florcinda Leal, Centro - Atilio Vivacqua/ES',
   'telefone',  '(28) 99883-9321',
