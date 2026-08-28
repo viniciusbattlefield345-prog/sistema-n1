@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { numero, reais } from "@/lib/formato";
 import type { Adicional, ItemCarrinho, Produto } from "@/lib/tipos";
 
@@ -32,6 +32,20 @@ export function ModalItem({
   const [escolhidos, setEscolhidos] = useState<number[]>([]);
   const [quantidade, setQuantidade] = useState(1);
   const [observacao, setObservacao] = useState("");
+
+  // Separa por secao ("Acompanhamentos", "Carnes"...) mantendo a ordem
+  // do cardapio. Sem grupo, tudo cai num bloco so chamado "Adicionais".
+  const grupos = useMemo(() => {
+    const mapa = new Map<string, Adicional[]>();
+    for (const a of [...extrasDisponiveis].sort(
+      (x, y) => x.ordem - y.ordem || x.nome.localeCompare(y.nome, "pt-BR"),
+    )) {
+      const chave = a.grupo?.trim() || "Adicionais";
+      if (!mapa.has(chave)) mapa.set(chave, []);
+      mapa.get(chave)!.push(a);
+    }
+    return [...mapa.entries()];
+  }, [extrasDisponiveis]);
 
   useEffect(() => {
     const fechaNoEsc = (e: KeyboardEvent) => e.key === "Escape" && aoFechar();
@@ -72,7 +86,7 @@ export function ModalItem({
         role="dialog"
         aria-modal="true"
         aria-label={`Montar ${produto.nome}`}
-        className="flex max-h-[85vh] w-full max-w-md flex-col rounded-2xl border border-borda bg-carvao"
+        className="flex max-h-[88vh] w-full max-w-2xl flex-col rounded-2xl border border-borda bg-carvao"
         onClick={(e) => e.stopPropagation()}
       >
         <header className="border-b border-borda px-6 py-4">
@@ -116,19 +130,20 @@ export function ModalItem({
             </fieldset>
           )}
 
-          {extrasDisponiveis.length > 0 && (
-            <fieldset className="mb-5">
-              <legend className="rotulo">Adicionais</legend>
-              <div className="grid grid-cols-2 gap-2">
-                {extrasDisponiveis.map((a) => {
+          {grupos.map(([grupo, itens]) => (
+            <fieldset key={grupo} className="mb-5">
+              <legend className="rotulo">{grupo}</legend>
+              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                {itens.map((a) => {
                   const marcado = escolhidos.includes(a.id);
+                  const custa = Number(a.preco) > 0;
                   return (
                     <label
                       key={a.id}
                       className={
-                        "flex cursor-pointer items-center justify-between gap-2 rounded-lg border px-3 py-2.5 text-sm transition-colors " +
+                        "flex cursor-pointer items-center justify-between gap-1.5 rounded-lg border px-2.5 py-2.5 text-sm transition-colors " +
                         (marcado
-                          ? "border-ouro bg-ouro/10 text-creme"
+                          ? "border-ouro bg-ouro/15 text-creme"
                           : "border-borda text-creme-suave hover:border-borda-forte")
                       }
                     >
@@ -147,15 +162,18 @@ export function ModalItem({
                         />
                         <span className="truncate">{a.nome}</span>
                       </span>
-                      <span className="tabular shrink-0 text-xs">
-                        +{numero(Number(a.preco))}
-                      </span>
+                      {/* item de marmita nao custa nada: mostrar "+0,00" e ruido */}
+                      {custa && (
+                        <span className="tabular shrink-0 text-xs">
+                          +{numero(Number(a.preco))}
+                        </span>
+                      )}
                     </label>
                   );
                 })}
               </div>
             </fieldset>
-          )}
+          ))}
 
           <div className="mb-5">
             <label className="rotulo" htmlFor="obs-item">

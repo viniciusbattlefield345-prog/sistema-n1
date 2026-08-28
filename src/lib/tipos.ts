@@ -43,6 +43,9 @@ export interface Adicional {
   nome: string;
   preco: number;
   ativo: boolean;
+  /** Secao na tela: "Acompanhamentos", "Carnes", "Saladas e fritos". */
+  grupo: string | null;
+  ordem: number;
 }
 
 export interface Produto {
