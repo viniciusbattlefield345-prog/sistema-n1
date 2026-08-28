@@ -1,26 +1,217 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* =====================================================================
+   N1 Restaurante e Choperia
+   Preto quente + ouro da coroa. O ambar do chopp aparece em um lugar so.
+   ===================================================================== */
+
+@theme {
+  /* --- superficies: preto puxado pro marrom, nao cinza neutro --- */
+  --color-breu: #0f0d0a;
+  --color-carvao: #17140f;
+  --color-madeira: #221c14;
+  --color-borda: #332a1e;
+  --color-borda-forte: #4a3c28;
+
+  /* --- ouro da coroa --- */
+  --color-ouro: #e3ae3c;
+  --color-ouro-claro: #f7d47f;
+  --color-ouro-escuro: #a97c23;
+
+  /* --- espuma e texto --- */
+  --color-creme: #f5edda;
+  --color-creme-suave: #b9ad96;
+  --color-creme-fraco: #7a7060;
+
+  /* --- estados --- */
+  --color-preparo: #e08a2c;
+  --color-pronto: #4e9a5f;
+  --color-cancelado: #c0392b;
+
+  --font-display: var(--fonte-display), "Arial Narrow", sans-serif;
+  --font-sans: var(--fonte-corpo), system-ui, sans-serif;
+  --font-mono: var(--fonte-mono), "Courier New", monospace;
+
+  --radius-cupom: 2px;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+@layer base {
+  html {
+    background: var(--color-breu);
+    color-scheme: dark;
+  }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  body {
+    background: var(--color-breu);
+    color: var(--color-creme);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* numeros sempre alinhados em coluna: preco nao "dança" na tabela */
+  .tabular,
+  input[type="number"] {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* foco visivel de teclado — a atendente trabalha muito no Tab */
+  :focus-visible {
+    outline: 2px solid var(--color-ouro);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-carvao);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-borda-forte);
+    border-radius: 5px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-ouro-escuro);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer components {
+  /* ---------------------------------------------------------------
+     FITA — a faixa da logo ("ESTACAO DO CHOPP") vira o cabecalho
+     de secao do sistema. Pontas chanfradas, como no desenho.
+     --------------------------------------------------------------- */
+  .fita {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.3rem 1.1rem;
+    background: linear-gradient(
+      180deg,
+      var(--color-ouro-claro) 0%,
+      var(--color-ouro) 45%,
+      var(--color-ouro-escuro) 100%
+    );
+    color: #241a08;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.8rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    clip-path: polygon(
+      0 0,
+      100% 0,
+      calc(100% - 10px) 50%,
+      100% 100%,
+      0 100%,
+      10px 50%
+    );
+  }
+
+  /* ouro que se comporta como metal: claro em cima, escuro embaixo */
+  .metal {
+    background: linear-gradient(
+      180deg,
+      var(--color-ouro-claro) 0%,
+      var(--color-ouro) 50%,
+      var(--color-ouro-escuro) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.25rem;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: background-color 120ms ease, border-color 120ms ease;
+  }
+  .btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* o unico degrade de chopp do sistema fica na acao principal */
+  .btn-ouro {
+    background: linear-gradient(180deg, #f0a03c 0%, #e3ae3c 55%, #b8862a 100%);
+    color: #241a08;
+    border: 1px solid var(--color-ouro-escuro);
+    font-weight: 700;
+  }
+  .btn-ouro:hover:not(:disabled) {
+    background: linear-gradient(180deg, #ffd98a 0%, #f0bc55 55%, #cf9a32 100%);
+  }
+
+  .btn-quieto {
+    background: var(--color-madeira);
+    color: var(--color-creme);
+    border: 1px solid var(--color-borda);
+  }
+  .btn-quieto:hover:not(:disabled) {
+    border-color: var(--color-borda-forte);
+    background: #2b2318;
+  }
+
+  .campo {
+    width: 100%;
+    background: var(--color-breu);
+    border: 1px solid var(--color-borda);
+    border-radius: 8px;
+    padding: 0.7rem 0.85rem;
+    color: var(--color-creme);
+    font-size: 0.95rem;
+    transition: border-color 120ms ease;
+  }
+  .campo::placeholder {
+    color: var(--color-creme-fraco);
+  }
+  .campo:focus {
+    border-color: var(--color-ouro);
+    outline: none;
+  }
+
+  .rotulo {
+    display: block;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-creme-suave);
+    margin-bottom: 0.35rem;
+  }
+
+  /* ---------------------------------------------------------------
+     CUPOM — a comanda na tela e o papel que sai na Tanca.
+     Mesmo tipo, mesmas linhas tracejadas, mesma coluna de dinheiro.
+     --------------------------------------------------------------- */
+  .cupom {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    line-height: 1.45;
+    font-variant-numeric: tabular-nums;
+  }
+  .cupom-linha {
+    border-bottom: 1px dashed var(--color-borda-forte);
+  }
+  .cupom-linha-forte {
+    border-bottom: 2px solid var(--color-borda-forte);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
