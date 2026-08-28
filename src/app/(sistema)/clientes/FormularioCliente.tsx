@@ -21,11 +21,14 @@ export function FormularioCliente({
   bairros,
   aoFechar,
   aoSalvar,
+  nomeInicial,
 }: {
   cliente?: Cliente | null;
   bairros: Bairro[];
   aoFechar: () => void;
   aoSalvar?: (id: number) => void;
+  /** Vem do PDV: o nome que a atendente ja tinha digitado na busca. */
+  nomeInicial?: string;
 }) {
   const [dados, setDados] = useState<DadosCliente>(
     cliente
@@ -39,7 +42,7 @@ export function FormularioCliente({
           referencia: cliente.referencia ?? "",
           observacao: cliente.observacao ?? "",
         }
-      : VAZIO,
+      : { ...VAZIO, nome: nomeInicial ?? "" },
   );
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, iniciar] = useTransition();

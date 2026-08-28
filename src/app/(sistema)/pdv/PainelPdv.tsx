@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { gravarRascunho, lerRascunho, limparRascunho } from "./rascunho";
 import { Comanda } from "./Comanda";
 import { ModalItem } from "./ModalItem";
 import { FormularioCliente } from "../clientes/FormularioCliente";
@@ -66,6 +67,64 @@ export function PainelPdv({
   const [forma, setForma] = useState<FormaPagamento>("Dinheiro");
   const [trocoTexto, setTrocoTexto] = useState("");
   const [erro, setErro] = useState<string | null>(null);
+  const [restaurado, setRestaurado] = useState(false);
+  const [clienteNovoId, setClienteNovoId] = useState<number | null>(null);
+
+  // Cliente recém-cadastrado no PDV já entra selecionado, assim que a lista
+  // atualizada chega do servidor.
+  useEffect(() => {
+    if (clienteNovoId === null) return;
+    const novo = clientes.find((c) => c.id === clienteNovoId);
+    if (!novo) return;
+    setCliente(novo);
+    setBuscaCliente("");
+    setClienteNovoId(null);
+  }, [clienteNovoId, clientes]);
+
+  // --- rascunho: o pedido sobrevive a sair da tela e a fechar o navegador ---
+  const carregado = useRef(false);
+
+  useEffect(() => {
+    const r = lerRascunho();
+    carregado.current = true;
+    if (!r) return;
+
+    setItens(r.itens);
+    setTipo(r.tipo);
+    setNomeAvulso(r.nomeAvulso);
+    setForma(r.forma);
+    setTrocoTexto(r.trocoTexto);
+
+    // O cliente é reconferido contra a lista atual: pode ter sido apagado
+    // ou ter mudado de endereço enquanto o rascunho esperava.
+    if (r.clienteId !== null) {
+      const atual = clientes.find((c) => c.id === r.clienteId) ?? null;
+      setCliente(atual);
+    }
+    setRestaurado(true);
+  }, [clientes]);
+
+  useEffect(() => {
+    if (!carregado.current) return; // não apagar o rascunho antes de lê-lo
+    gravarRascunho({
+      itens,
+      tipo,
+      clienteId: cliente?.id ?? null,
+      nomeAvulso,
+      forma,
+      trocoTexto,
+    });
+  }, [itens, tipo, cliente, nomeAvulso, forma, trocoTexto]);
+
+  function limparPedido() {
+    setItens([]);
+    setCliente(null);
+    setNomeAvulso("");
+    setTrocoTexto("");
+    setBuscaCliente("");
+    setRestaurado(false);
+    limparRascunho();
+  }
 
   const bairro = bairros.find((b) => b.id === cliente?.bairro_id) ?? null;
   const taxa = tipo === "ENTREGA" ? Number(bairro?.taxa ?? 0) : 0;
@@ -181,6 +240,8 @@ export function PainelPdv({
         setErro(resultado.erro);
         return;
       }
+      // Pedido gravado: o rascunho cumpriu o papel e sai de cena.
+      limparRascunho();
       router.push(`/imprimir/${resultado.pedido_id}`);
     });
   }
@@ -199,6 +260,15 @@ export function PainelPdv({
             <h1 className="font-display text-2xl uppercase tracking-wide text-creme">
               Novo pedido
             </h1>
+            {itens.length > 0 && (
+              <button
+                type="button"
+                onClick={limparPedido}
+                className="text-xs text-creme-fraco underline hover:text-cancelado"
+              >
+                Limpar pedido
+              </button>
+            )}
             <input
               className="campo max-w-xs"
               value={busca}
@@ -207,6 +277,13 @@ export function PainelPdv({
               aria-label="Buscar produto"
             />
           </div>
+
+          {restaurado && (
+            <p className="mb-3 rounded-lg border border-ouro/40 bg-ouro/10 px-3 py-2 text-sm text-ouro">
+              Recuperei o pedido que estava em aberto. Confira a comanda antes
+              de fechar.
+            </p>
+          )}
 
           <div className="flex flex-wrap gap-2">
             <Pilula
@@ -468,8 +545,13 @@ export function PainelPdv({
       {cadastrando && (
         <FormularioCliente
           bairros={bairros}
+          nomeInicial={buscaCliente.trim()}
           aoFechar={() => setCadastrando(false)}
-          aoSalvar={() => router.refresh()}
+          aoSalvar={(id) => {
+            // Guarda o id: o cliente novo só chega na lista depois do refresh.
+            setClienteNovoId(id);
+            router.refresh();
+          }}
         />
       )}
 
