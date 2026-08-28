@@ -8,8 +8,9 @@ export default async function PaginaLogin({ searchParams }: PageProps<"/login">)
   return (
     <main className="grid min-h-screen place-items-center bg-breu px-4 py-10">
       <div className="w-full max-w-sm">
-        <div className="mb-8 flex justify-center">
-          <Marca tamanho={110} />
+        {/* a propria arte ja traz a fita "Estacao do Chopp": nao repetir */}
+        <div className="mb-6 flex justify-center">
+          <Marca tamanho={170} comFita={false} />
         </div>
 
         <div className="rounded-2xl border border-borda bg-carvao p-7">

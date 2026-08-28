@@ -108,8 +108,8 @@ export function BarraLateral({ nome, papel }: { nome: string; papel: Papel }) {
 
   return (
     <aside className="fixed inset-y-0 left-0 z-40 flex w-[232px] flex-col border-r border-borda bg-carvao">
-      <div className="flex flex-col items-center gap-2 border-b border-borda px-4 py-5">
-        <Marca tamanho={56} comFita={false} />
+      <div className="flex flex-col items-center gap-1 border-b border-borda px-4 py-4">
+        <Marca tamanho={92} comFita={false} />
         <p className="font-display text-sm uppercase tracking-[0.12em] text-creme">
           N°1 Restaurante
         </p>

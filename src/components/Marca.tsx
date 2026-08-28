@@ -4,8 +4,14 @@ import { useEffect, useRef, useState } from "react";
 
 /**
  * Marca do restaurante.
- * Se existir /public/logo.png, usa a arte. Se nao, monta o brasao em texto —
- * assim o sistema nunca abre quebrado esperando um arquivo.
+ *
+ * A arte tem fundo preto chapado. Em vez de recortar o PNG (o recorte
+ * automatico come as areas claras internas — a espuma, o brilho do ouro),
+ * usamos mix-blend-mode: lighten. Sobre um fundo escuro, o preto da arte
+ * some sozinho e o dourado continua intacto. Zero edicao de arquivo.
+ *
+ * Se /public/logo.jpg ainda nao existir, cai no brasao em texto — o
+ * sistema nunca abre quebrado esperando um arquivo.
  */
 export function Marca({
   tamanho = 84,
@@ -30,17 +36,17 @@ export function Marca({
         // eslint-disable-next-line @next/next/no-img-element
         <img
           ref={ref}
-          src="/logo.png"
-          alt="N1 Restaurante e Choperia"
+          src="/logo.jpg"
+          alt="N°1 Restaurante e Choperia"
           width={tamanho}
           height={tamanho}
-          className="rounded-full object-contain"
+          className="object-contain mix-blend-lighten"
           style={{ width: tamanho, height: tamanho }}
           onError={() => setTemArte(false)}
         />
       ) : (
         <div
-          className="flex items-center justify-center rounded-full border-2 border-ouro-escuro bg-breu"
+          className="border-ouro-escuro bg-breu flex items-center justify-center rounded-full border-2"
           style={{ width: tamanho, height: tamanho }}
         >
           <span
