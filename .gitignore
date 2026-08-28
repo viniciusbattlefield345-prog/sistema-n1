@@ -42,3 +42,6 @@ next-env.d.ts
 
 # Arte original da logo (fica fora do Git)
 /public/logo-original.*
+
+.vercel
+.env*
