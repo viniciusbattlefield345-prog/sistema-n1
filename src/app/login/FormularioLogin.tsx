@@ -1,8 +1,10 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { entrar, type EstadoLogin } from "./acoes";
+
+const CHAVE = "n1:usuario";
 
 function BotaoEntrar() {
   const { pending } = useFormStatus();
@@ -18,8 +20,35 @@ export function FormularioLogin({ destino }: { destino: string }) {
     erro: null,
   });
 
+  // Guardamos só o nome de usuário neste computador — nunca a senha.
+  // Quem guarda senha com segurança é o navegador, pelo gerenciador dele.
+  const [usuario, setUsuario] = useState("");
+  const [lembrar, setLembrar] = useState(false);
+
+  useEffect(() => {
+    try {
+      const salvo = localStorage.getItem(CHAVE);
+      if (salvo) {
+        setUsuario(salvo);
+        setLembrar(true);
+      }
+    } catch {
+      // navegador anônimo ou site bloqueado: segue sem lembrar
+    }
+  }, []);
+
+  function aoEnviar(form: FormData) {
+    try {
+      if (lembrar) localStorage.setItem(CHAVE, String(form.get("usuario") ?? ""));
+      else localStorage.removeItem(CHAVE);
+    } catch {
+      // sem armazenamento: entrar continua funcionando
+    }
+    acao(form);
+  }
+
   return (
-    <form action={acao} className="flex flex-col gap-4">
+    <form action={aoEnviar} className="flex flex-col gap-4">
       <input type="hidden" name="voltar" value={destino} />
 
       <div>
@@ -37,6 +66,8 @@ export function FormularioLogin({ destino }: { destino: string }) {
           autoFocus
           className="campo"
           placeholder="arinete"
+          value={usuario}
+          onChange={(e) => setUsuario(e.target.value)}
         />
       </div>
 
@@ -54,6 +85,16 @@ export function FormularioLogin({ destino }: { destino: string }) {
           placeholder="••••••••"
         />
       </div>
+
+      <label className="flex cursor-pointer items-center gap-2 text-sm text-creme-suave">
+        <input
+          type="checkbox"
+          className="accent-ouro"
+          checked={lembrar}
+          onChange={(e) => setLembrar(e.target.checked)}
+        />
+        Lembrar meu usuário neste computador
+      </label>
 
       {estado.erro && (
         <p

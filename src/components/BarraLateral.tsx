@@ -51,19 +51,19 @@ type Item = {
 const VENDAS: Item[] = [
   { href: "/pdv", rotulo: "Novo pedido", icone: I.pdv, pronto: true },
   { href: "/cozinha", rotulo: "Cozinha", icone: I.cozinha, pronto: true },
-  { href: "/pedidos", rotulo: "Pedidos do dia", icone: I.pedidos },
+  { href: "/pedidos", rotulo: "Pedidos do dia", icone: I.pedidos, pronto: true },
   { href: "/caixa", rotulo: "Caixa", icone: I.caixa, pronto: true },
 ];
 
 const GERENCIA: Item[] = [
-  { href: "/relatorios", rotulo: "Relatórios", icone: I.relatorios, dono: true },
-  { href: "/cardapio", rotulo: "Cardápio", icone: I.cardapio },
-  { href: "/adicionais", rotulo: "Adicionais", icone: I.adicionais },
-  { href: "/categorias", rotulo: "Categorias", icone: I.categorias },
+  { href: "/relatorios", rotulo: "Relatórios", icone: I.relatorios, dono: true, pronto: true },
+  { href: "/cardapio", rotulo: "Cardápio", icone: I.cardapio, pronto: true },
+  { href: "/adicionais", rotulo: "Adicionais", icone: I.adicionais, pronto: true },
+  { href: "/categorias", rotulo: "Categorias", icone: I.categorias, pronto: true },
   { href: "/clientes", rotulo: "Clientes", icone: I.clientes, pronto: true },
-  { href: "/bairros", rotulo: "Bairros e taxas", icone: I.bairros },
-  { href: "/acessos", rotulo: "Acessos", icone: I.acessos, dono: true },
-  { href: "/configuracoes", rotulo: "Configurações", icone: I.config, dono: true },
+  { href: "/bairros", rotulo: "Bairros e taxas", icone: I.bairros, pronto: true },
+  { href: "/acessos", rotulo: "Acessos", icone: I.acessos, dono: true, pronto: true },
+  { href: "/configuracoes", rotulo: "Configurações", icone: I.config, dono: true, pronto: true },
 ];
 
 function Grupo({
