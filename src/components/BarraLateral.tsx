@@ -38,13 +38,21 @@ const I = {
   sair: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
 };
 
-type Item = { href: string; rotulo: string; icone: string; dono?: boolean };
+/** `pronto` marca a tela que ja existe. As outras aparecem como "em breve",
+ *  sem link — menu que leva a 404 e pior do que menu que avisa. */
+type Item = {
+  href: string;
+  rotulo: string;
+  icone: string;
+  dono?: boolean;
+  pronto?: boolean;
+};
 
 const VENDAS: Item[] = [
-  { href: "/pdv", rotulo: "Novo pedido", icone: I.pdv },
-  { href: "/cozinha", rotulo: "Cozinha", icone: I.cozinha },
+  { href: "/pdv", rotulo: "Novo pedido", icone: I.pdv, pronto: true },
+  { href: "/cozinha", rotulo: "Cozinha", icone: I.cozinha, pronto: true },
   { href: "/pedidos", rotulo: "Pedidos do dia", icone: I.pedidos },
-  { href: "/caixa", rotulo: "Caixa", icone: I.caixa },
+  { href: "/caixa", rotulo: "Caixa", icone: I.caixa, pronto: true },
 ];
 
 const GERENCIA: Item[] = [
@@ -52,7 +60,7 @@ const GERENCIA: Item[] = [
   { href: "/cardapio", rotulo: "Cardápio", icone: I.cardapio },
   { href: "/adicionais", rotulo: "Adicionais", icone: I.adicionais },
   { href: "/categorias", rotulo: "Categorias", icone: I.categorias },
-  { href: "/clientes", rotulo: "Clientes", icone: I.clientes },
+  { href: "/clientes", rotulo: "Clientes", icone: I.clientes, pronto: true },
   { href: "/bairros", rotulo: "Bairros e taxas", icone: I.bairros },
   { href: "/acessos", rotulo: "Acessos", icone: I.acessos, dono: true },
   { href: "/configuracoes", rotulo: "Configurações", icone: I.config, dono: true },
@@ -79,6 +87,23 @@ function Grupo({
       </p>
       <nav className="flex flex-col gap-0.5">
         {visiveis.map((item) => {
+          if (!item.pronto) {
+            return (
+              <span
+                key={item.href}
+                aria-disabled="true"
+                title="Ainda estamos construindo esta tela"
+                className="flex cursor-default items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-creme-fraco/60"
+              >
+                <Icone d={item.icone} />
+                <span className="flex-1">{item.rotulo}</span>
+                <span className="rounded border border-borda px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide">
+                  em breve
+                </span>
+              </span>
+            );
+          }
+
           const ativo = atual === item.href || atual.startsWith(item.href + "/");
           return (
             <Link

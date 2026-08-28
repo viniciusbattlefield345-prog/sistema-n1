@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Comanda } from "./Comanda";
 import { ModalItem } from "./ModalItem";
+import { FormularioCliente } from "../clientes/FormularioCliente";
 import { salvarPedido } from "./acoes";
 import { reais, telefone as formatarTelefone } from "@/lib/formato";
 import type {
@@ -58,6 +59,7 @@ export function PainelPdv({
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [nomeAvulso, setNomeAvulso] = useState("");
   const [buscaCliente, setBuscaCliente] = useState("");
+  const [cadastrando, setCadastrando] = useState(false);
 
   const [forma, setForma] = useState<FormaPagamento>("Dinheiro");
   const [trocoTexto, setTrocoTexto] = useState("");
@@ -332,11 +334,15 @@ export function PainelPdv({
                     ))}
                   </ul>
                 )}
-                {buscaCliente.trim() && clientesFiltrados.length === 0 && (
-                  <p className="mt-2 text-xs text-creme-fraco">
-                    Nenhum cliente com esse nome. Cadastre em Clientes.
-                  </p>
-                )}
+                <button
+                  type="button"
+                  onClick={() => setCadastrando(true)}
+                  className="mt-2 text-xs text-ouro underline hover:text-ouro-claro"
+                >
+                  {buscaCliente.trim() && clientesFiltrados.length === 0
+                    ? `Nenhum encontrado — cadastrar "${buscaCliente.trim()}"`
+                    : "Cadastrar cliente novo"}
+                </button>
               </div>
             )
           ) : (
@@ -421,6 +427,14 @@ export function PainelPdv({
           </button>
         </div>
       </aside>
+
+      {cadastrando && (
+        <FormularioCliente
+          bairros={bairros}
+          aoFechar={() => setCadastrando(false)}
+          aoSalvar={() => router.refresh()}
+        />
+      )}
 
       {produtoAberto && (
         <ModalItem
