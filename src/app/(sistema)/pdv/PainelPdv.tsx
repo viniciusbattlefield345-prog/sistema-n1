@@ -60,6 +60,8 @@ export function PainelPdv({
   const [nomeAvulso, setNomeAvulso] = useState("");
   const [buscaCliente, setBuscaCliente] = useState("");
   const [cadastrando, setCadastrando] = useState(false);
+  // No celular a comanda nao cabe ao lado do cardapio: vira gaveta.
+  const [verComanda, setVerComanda] = useState(false);
 
   const [forma, setForma] = useState<FormaPagamento>("Dinheiro");
   const [trocoTexto, setTrocoTexto] = useState("");
@@ -189,9 +191,9 @@ export function PainelPdv({
     (tipo === "RETIRADA" || Boolean(cliente));
 
   return (
-    <div className="flex h-screen">
+    <div className="flex h-[calc(100vh-3.25rem)] lg:h-screen">
       {/* ---------------- CARDÁPIO ---------------- */}
-      <section className="flex min-w-0 flex-1 flex-col">
+      <section className="flex min-w-0 flex-1 flex-col pb-20 lg:pb-0">
         <header className="border-b border-borda px-6 py-4">
           <div className="mb-4 flex items-center gap-4">
             <h1 className="font-display text-2xl uppercase tracking-wide text-creme">
@@ -254,7 +256,21 @@ export function PainelPdv({
       </section>
 
       {/* ---------------- COMANDA ---------------- */}
-      <aside className="flex w-[390px] shrink-0 flex-col border-l border-borda bg-carvao">
+      <aside
+        className={
+          "z-40 flex flex-col border-borda bg-carvao " +
+          "fixed inset-0 transition-transform lg:static lg:w-[390px] lg:shrink-0 lg:translate-y-0 lg:border-l " +
+          (verComanda ? "translate-y-0" : "translate-y-full lg:translate-y-0")
+        }
+      >
+        <button
+          type="button"
+          onClick={() => setVerComanda(false)}
+          className="flex items-center justify-between border-b border-borda px-4 py-3 text-sm text-creme-suave lg:hidden"
+        >
+          <span className="font-display uppercase tracking-wide">Comanda</span>
+          <span>fechar</span>
+        </button>
         {/* tipo + cliente */}
         <div className="border-b border-borda p-4">
           <div className="mb-3 grid grid-cols-2 gap-2">
@@ -427,6 +443,27 @@ export function PainelPdv({
           </button>
         </div>
       </aside>
+
+      {/* rodapé do celular: total sempre à vista, um toque abre a comanda */}
+      <button
+        type="button"
+        onClick={() => setVerComanda(true)}
+        className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-between border-t border-borda bg-carvao px-4 py-3 lg:hidden"
+      >
+        <span className="text-sm text-creme-suave">
+          {itens.length === 0
+            ? "Nenhum item"
+            : `${itens.length} ${itens.length === 1 ? "item" : "itens"} na comanda`}
+        </span>
+        <span className="flex items-center gap-3">
+          <span className="tabular font-display text-xl text-ouro">
+            {reais(total)}
+          </span>
+          <span className="rounded-lg bg-ouro/15 px-3 py-1.5 text-xs font-semibold text-ouro">
+            Ver comanda
+          </span>
+        </span>
+      </button>
 
       {cadastrando && (
         <FormularioCliente

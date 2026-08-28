@@ -76,7 +76,7 @@ export default async function PaginaRelatorios() {
     .slice(0, 10);
 
   return (
-    <div className="p-8">
+    <div className="p-4 lg:p-8">
       <Cabecalho
         fita="Gerência"
         titulo="Relatórios"

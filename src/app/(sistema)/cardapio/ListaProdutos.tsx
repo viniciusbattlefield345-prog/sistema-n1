@@ -40,7 +40,7 @@ export function ListaProdutos({
   }
 
   return (
-    <div className="p-8">
+    <div className="p-4 lg:p-8">
       <Cabecalho
         fita="Cardápio"
         titulo="Cardápio"

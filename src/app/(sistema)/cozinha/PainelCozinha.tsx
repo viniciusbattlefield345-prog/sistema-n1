@@ -45,7 +45,7 @@ export function PainelCozinha({ pedidos }: { pedidos: Pedido[] }) {
   const saiu = pedidos.filter((p) => p.status === "SAIU PARA ENTREGA");
 
   return (
-    <div className="p-8">
+    <div className="p-4 lg:p-8">
       <Cabecalho
         fita="Produção"
         titulo="Cozinha"

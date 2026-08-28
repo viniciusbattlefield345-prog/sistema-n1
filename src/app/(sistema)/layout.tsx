@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { criarClienteServidor } from "@/lib/supabase/server";
-import { BarraLateral } from "@/components/BarraLateral";
+import { Moldura } from "@/components/Moldura";
 
 export default async function LayoutSistema({
   children,
@@ -19,12 +19,8 @@ export default async function LayoutSistema({
     .single();
 
   return (
-    <div className="flex min-h-screen">
-      <BarraLateral
-        nome={perfil?.nome ?? user.email ?? "Equipe"}
-        papel={perfil?.papel ?? "atendente"}
-      />
-      <main className="ml-[232px] flex-1 bg-breu">{children}</main>
-    </div>
+    <Moldura nome={perfil?.nome ?? user.email ?? "Equipe"} papel={perfil?.papel ?? "atendente"}>
+      {children}
+    </Moldura>
   );
 }

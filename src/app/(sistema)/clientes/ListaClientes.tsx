@@ -46,7 +46,7 @@ export function ListaClientes({
   }
 
   return (
-    <div className="p-8">
+    <div className="p-4 lg:p-8">
       <Cabecalho
         fita="Entrega"
         titulo="Clientes"
@@ -88,8 +88,8 @@ export function ListaClientes({
       ) : filtrados.length === 0 ? (
         <Vazio titulo="Nada encontrado" texto="Nenhum cliente com esse nome, telefone ou rua." />
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-borda">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto rounded-2xl border border-borda">
+          <table className="w-full min-w-[42rem] text-sm">
             <thead className="bg-carvao text-left text-xs uppercase tracking-wide text-creme-suave">
               <tr>
                 <th className="px-4 py-3 font-semibold">Nome</th>

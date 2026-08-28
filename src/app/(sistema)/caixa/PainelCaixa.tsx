@@ -45,7 +45,7 @@ export function PainelCaixa({
   }
 
   return (
-    <div className="p-8">
+    <div className="p-4 lg:p-8">
       <Cabecalho
         fita={aberto ? "Caixa aberto" : "Caixa fechado"}
         titulo="Caixa"
@@ -201,8 +201,8 @@ export function PainelCaixa({
           <h2 className="mb-3 font-display text-lg uppercase tracking-wide text-creme-suave">
             Fechamentos anteriores
           </h2>
-          <div className="overflow-hidden rounded-2xl border border-borda">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto rounded-2xl border border-borda">
+            <table className="w-full min-w-[42rem] text-sm">
               <thead className="bg-carvao text-left text-xs uppercase tracking-wide text-creme-suave">
                 <tr>
                   <th className="px-4 py-3 font-semibold">Aberto</th>

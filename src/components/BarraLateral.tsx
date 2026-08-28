@@ -127,12 +127,25 @@ function Grupo({
   );
 }
 
-export function BarraLateral({ nome, papel }: { nome: string; papel: Papel }) {
+export function BarraLateral({
+  nome,
+  papel,
+  aberto,
+}: {
+  nome: string;
+  papel: Papel;
+  aberto: boolean;
+}) {
   const atual = usePathname();
   const primeiroNome = nome.split(" ")[0];
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 flex w-[232px] flex-col border-r border-borda bg-carvao">
+    <aside
+      className={
+        "fixed inset-y-0 left-0 z-50 flex w-[232px] flex-col border-r border-borda bg-carvao transition-transform lg:z-40 lg:translate-x-0 " +
+        (aberto ? "translate-x-0" : "-translate-x-full")
+      }
+    >
       <div className="flex flex-col items-center gap-1 border-b border-borda px-4 py-4">
         <Marca tamanho={92} comFita={false} />
         <p className="font-display text-sm uppercase tracking-[0.12em] text-creme">
