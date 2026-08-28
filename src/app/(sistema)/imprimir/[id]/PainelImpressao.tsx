@@ -62,8 +62,8 @@ export function PainelImpressao({
   const itens = pedido.itens_pedido ?? [];
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-6 p-8">
-      <div className="flex items-start justify-between gap-6">
+    <div className="folha-raiz mx-auto flex max-w-3xl flex-col gap-6 p-4 lg:p-8">
+      <div className="nao-imprimir flex items-start justify-between gap-6">
         <div>
           <span className="fita mb-3">Pedido {numeroPedido(pedido.numero_dia)}</span>
           <h1 className="font-display text-3xl uppercase tracking-wide text-creme">
@@ -83,7 +83,7 @@ export function PainelImpressao({
       <div
         role="status"
         className={
-          "rounded-xl border px-4 py-3 text-sm " +
+          "nao-imprimir rounded-xl border px-4 py-3 text-sm " +
           (estado === "erro"
             ? "border-cancelado/40 bg-cancelado/10 text-cancelado"
             : estado === "impresso"
@@ -98,11 +98,17 @@ export function PainelImpressao({
           <>
             <strong className="block">Não imprimiu.</strong>
             {mensagem}
+            <button
+              onClick={() => window.print()}
+              className="mt-2 block underline underline-offset-2"
+            >
+              Imprimir pelo navegador ou salvar em PDF
+            </button>
           </>
         )}
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="nao-imprimir flex flex-wrap gap-2">
         <button
           className="btn btn-ouro"
           onClick={() => imprimir("tudo")}
@@ -124,10 +130,13 @@ export function PainelImpressao({
         >
           Só entrega
         </button>
+        <button className="btn btn-quieto" onClick={() => window.print()}>
+          Ver / salvar em PDF
+        </button>
       </div>
 
       {/* pré-visualização: o mesmo cupom que sai no papel */}
-      <div className="cupom w-full max-w-[340px] rounded-lg border border-borda bg-carvao p-4">
+      <div className="folha cupom w-full max-w-[340px] rounded-lg border border-borda bg-carvao p-4">
         <p className="text-center font-display text-base uppercase tracking-[0.1em] text-ouro">
           {restaurante?.nome ?? "N°1 Restaurante e Choperia"}
         </p>

@@ -207,6 +207,69 @@
   }
 }
 
+/* =====================================================================
+   IMPRESSÃO PELO NAVEGADOR
+   Plano B quando o QZ Tray não está instalado, e caminho para salvar o
+   cupom em PDF. O papel térmico é branco: aqui o tema escuro é invertido.
+   ===================================================================== */
+@page {
+  size: 80mm auto;
+  margin: 3mm;
+}
+
+@media print {
+  /* menu, barra de topo e botões não vão para o papel */
+  aside,
+  header,
+  .nao-imprimir {
+    display: none !important;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    width: auto;
+    height: auto;
+  }
+
+  /* a margem que abre espaço para o menu não existe no papel */
+  main {
+    margin: 0 !important;
+  }
+
+  .folha-raiz {
+    display: block !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+
+  /* o cupom ocupa a folha inteira, em preto no branco */
+  .folha,
+  .folha * {
+    color: #000 !important;
+    background: transparent !important;
+    border-color: #000 !important;
+    box-shadow: none !important;
+  }
+
+  .folha {
+    width: 100% !important;
+    max-width: none !important;
+    border: 0 !important;
+    padding: 0 !important;
+    font-size: 12px !important;
+  }
+
+  .folha .cupom-linha {
+    border-bottom: 1px dashed #000 !important;
+  }
+  .folha .cupom-linha-forte {
+    border-bottom: 2px solid #000 !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
