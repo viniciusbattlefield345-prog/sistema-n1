@@ -229,10 +229,25 @@ begin
    where id = p_pedido;
 end $fn$;
 
+-- Em trigger de DELETE o registro "new" nao existe: tocar nele derruba a
+-- operacao. Por isso o TG_OP decide de onde vem o id, em vez de coalesce.
 create or replace function public.trg_recalcular_item()
 returns trigger language plpgsql as $fn$
+declare v_pedido bigint;
 begin
-  perform public.recalcular_total(coalesce(new.pedido_id, old.pedido_id));
+  if tg_op = 'DELETE' then
+    v_pedido := old.pedido_id;
+  else
+    v_pedido := new.pedido_id;
+  end if;
+
+  perform public.recalcular_total(v_pedido);
+
+  -- Se o item mudou de pedido, o pedido antigo tambem precisa ser refeito.
+  if tg_op = 'UPDATE' and old.pedido_id is distinct from new.pedido_id then
+    perform public.recalcular_total(old.pedido_id);
+  end if;
+
   return null;
 end $fn$;
 
@@ -242,13 +257,24 @@ create trigger item_recalcula
 
 create or replace function public.trg_recalcular_adicional()
 returns trigger language plpgsql as $fn$
-declare v_pedido bigint;
+declare
+  v_item   bigint;
+  v_pedido bigint;
 begin
-  select pedido_id into v_pedido
-    from itens_pedido where id = coalesce(new.item_id, old.item_id);
+  if tg_op = 'DELETE' then
+    v_item := old.item_id;
+  else
+    v_item := new.item_id;
+  end if;
+
+  -- Quando o item inteiro e apagado, os adicionais caem junto por cascata
+  -- e o item ja nao existe mais aqui. Nesse caso nao ha o que recalcular:
+  -- o trigger do proprio item cuida do total.
+  select pedido_id into v_pedido from itens_pedido where id = v_item;
   if v_pedido is not null then
     perform public.recalcular_total(v_pedido);
   end if;
+
   return null;
 end $fn$;
 
