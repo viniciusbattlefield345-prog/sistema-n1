@@ -1,37 +1,45 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Cabecalho, Vazio } from "@/components/Cabecalho";
 import { mudarStatus } from "./acoes";
-import { hora, minutosDesde, numeroPedido } from "@/lib/formato";
+import { useAoVivo } from "@/lib/aoVivo";
+import { hora, minutosDesde, numeroPedido, rotuloPedido } from "@/lib/formato";
 import type { Pedido, StatusPedido } from "@/lib/tipos";
 
 /** As três colunas da produção, na ordem em que o pedido anda. */
-const COLUNAS: { status: StatusPedido; titulo: string; proximo: StatusPedido }[] = [
-  { status: "PENDENTE", titulo: "Na fila", proximo: "EM PREPARO" },
-  { status: "EM PREPARO", titulo: "Preparando", proximo: "PRONTO" },
-  { status: "PRONTO", titulo: "Pronto", proximo: "SAIU PARA ENTREGA" },
+const COLUNAS: { status: StatusPedido; titulo: string }[] = [
+  { status: "PENDENTE", titulo: "Na fila" },
+  { status: "EM PREPARO", titulo: "Preparando" },
+  { status: "PRONTO", titulo: "Pronto" },
 ];
 
-const ACAO: Partial<Record<StatusPedido, string>> = {
-  PENDENTE: "Começar",
-  "EM PREPARO": "Ficou pronto",
-  PRONTO: "Saiu para entrega",
-  "SAIU PARA ENTREGA": "Entregue",
-};
+/** Depois de pronto, cada tipo de pedido termina de um jeito. */
+function proximoPasso(p: Pedido): { status: StatusPedido; rotulo: string } | null {
+  switch (p.status) {
+    case "PENDENTE":
+      return { status: "EM PREPARO", rotulo: "Começar" };
+    case "EM PREPARO":
+      return { status: "PRONTO", rotulo: "Ficou pronto" };
+    case "PRONTO":
+      if (p.tipo === "ENTREGA") return { status: "SAIU PARA ENTREGA", rotulo: "Saiu para entrega" };
+      return { status: "CONCLUIDO", rotulo: p.tipo === "MESA" ? "Servido na mesa" : "Retirado" };
+    case "SAIU PARA ENTREGA":
+      return { status: "CONCLUIDO", rotulo: "Entregue" };
+    default:
+      return null;
+  }
+}
 
 export function PainelCozinha({ pedidos }: { pedidos: Pedido[] }) {
   const router = useRouter();
   const [, iniciar] = useTransition();
   const [erro, setErro] = useState<string | null>(null);
 
-  // A cozinha não fica apertando F5: o painel se atualiza sozinho.
-  useEffect(() => {
-    const t = setInterval(() => router.refresh(), 15000);
-    return () => clearInterval(t);
-  }, [router]);
+  // A cozinha não fica apertando F5: pedido aprovado aparece na hora.
+  useAoVivo(["pedidos"], 20);
 
   function avancar(id: number, status: StatusPedido) {
     setErro(null);
@@ -49,7 +57,7 @@ export function PainelCozinha({ pedidos }: { pedidos: Pedido[] }) {
       <Cabecalho
         fita="Produção"
         titulo="Cozinha"
-        descricao="Atualiza sozinho a cada 15 segundos. O número grande é o mesmo que sai no cupom."
+        descricao="Atualiza sozinho. Pedido do QR só aparece aqui depois que alguém da equipe aprova."
       />
 
       {erro && (
@@ -64,10 +72,10 @@ export function PainelCozinha({ pedidos }: { pedidos: Pedido[] }) {
       {pedidos.length === 0 ? (
         <Vazio
           titulo="Nenhum pedido na cozinha"
-          texto="Assim que a atendente fechar um pedido, ele aparece aqui sozinho."
+          texto="Assim que um pedido for aprovado ou lançado, ele aparece aqui sozinho."
         >
-          <Link href="/pdv" className="btn btn-ouro">
-            Ir para o PDV
+          <Link href="/mesas" className="btn btn-ouro">
+            Ver as mesas
           </Link>
         </Vazio>
       ) : (
@@ -80,7 +88,7 @@ export function PainelCozinha({ pedidos }: { pedidos: Pedido[] }) {
                 className="rounded-2xl border border-borda bg-carvao/40 p-3"
               >
                 <div className="mb-3 flex items-center justify-between px-1">
-                  <h2 className="font-display text-sm uppercase tracking-[0.14em] text-creme-suave">
+                  <h2 className="font-display text-sm font-bold uppercase tracking-[0.14em] text-creme-suave">
                     {coluna.titulo}
                   </h2>
                   <span className="tabular rounded-full bg-madeira px-2 py-0.5 text-xs text-creme-suave">
@@ -89,14 +97,17 @@ export function PainelCozinha({ pedidos }: { pedidos: Pedido[] }) {
                 </div>
 
                 <div className="flex flex-col gap-3">
-                  {daColuna.map((p) => (
-                    <Ficha
-                      key={p.id}
-                      pedido={p}
-                      rotuloAcao={ACAO[coluna.status]!}
-                      aoAvancar={() => avancar(p.id, coluna.proximo)}
-                    />
-                  ))}
+                  {daColuna.map((p) => {
+                    const passo = proximoPasso(p);
+                    return (
+                      <Ficha
+                        key={p.id}
+                        pedido={p}
+                        rotuloAcao={passo?.rotulo ?? ""}
+                        aoAvancar={() => passo && avancar(p.id, passo.status)}
+                      />
+                    );
+                  })}
                   {daColuna.length === 0 && (
                     <p className="px-1 py-6 text-center text-xs text-creme-fraco">
                       Vazio
@@ -111,7 +122,7 @@ export function PainelCozinha({ pedidos }: { pedidos: Pedido[] }) {
 
       {saiu.length > 0 && (
         <section className="mt-8">
-          <h2 className="mb-3 font-display text-sm uppercase tracking-[0.14em] text-creme-suave">
+          <h2 className="mb-3 font-display text-sm font-bold uppercase tracking-[0.14em] text-creme-suave">
             Saiu para entrega
           </h2>
           <div className="flex flex-wrap gap-3">
@@ -120,7 +131,7 @@ export function PainelCozinha({ pedidos }: { pedidos: Pedido[] }) {
                 key={p.id}
                 className="flex items-center gap-3 rounded-xl border border-borda bg-carvao px-4 py-3"
               >
-                <span className="font-display text-xl text-ouro">
+                <span className="font-display text-xl font-bold text-ouro">
                   {numeroPedido(p.numero_dia)}
                 </span>
                 <span className="text-sm text-creme-suave">{p.cliente_nome}</span>
@@ -148,9 +159,11 @@ function Ficha({
   rotuloAcao: string;
   aoAvancar: () => void;
 }) {
-  const minutos = minutosDesde(pedido.criado_em);
-  // 20 minutos é quando um pedido de almoço começa a incomodar.
+  const minutos = minutosDesde(pedido.aprovado_em ?? pedido.criado_em);
+  // 20 minutos é quando um lanche começa a incomodar quem espera.
   const atrasado = minutos >= 20;
+  const rotulo = rotuloPedido(pedido);
+  const nome = pedido.cliente_nome !== rotulo ? pedido.cliente_nome : null;
 
   return (
     <article
@@ -160,17 +173,14 @@ function Ficha({
       }
     >
       <header className="mb-3 flex items-start justify-between gap-2">
-        <div>
-          <span className="font-display text-3xl leading-none text-ouro">
-            {numeroPedido(pedido.numero_dia)}
+        <div className="min-w-0">
+          <span className="block font-display text-2xl font-extrabold uppercase leading-none text-ouro">
+            {rotulo}
           </span>
-          <p className="mt-1 text-sm font-semibold text-creme">
-            {pedido.cliente_nome}
+          <p className="mt-1 text-xs text-creme-fraco">
+            {numeroPedido(pedido.numero_dia)} · {hora(pedido.criado_em)}
           </p>
-          <p className="text-xs text-creme-fraco">
-            {pedido.tipo_entrega === "ENTREGA" ? "Entrega" : "Retirada"} ·{" "}
-            {hora(pedido.criado_em)}
-          </p>
+          {nome && <p className="truncate text-sm font-semibold text-creme">{nome}</p>}
         </div>
         <span
           className={
@@ -194,7 +204,7 @@ function Ficha({
             </span>
             {(item.item_adicionais ?? []).length > 0 && (
               <p className="pl-6 text-xs leading-snug text-creme-suave">
-                {(item.item_adicionais ?? []).map((a) => a.nome).join(" · ")}
+                + {(item.item_adicionais ?? []).map((a) => a.nome).join(" · ")}
               </p>
             )}
             {item.observacao && (
@@ -206,10 +216,16 @@ function Ficha({
         ))}
       </ul>
 
+      {pedido.observacao && (
+        <p className="mb-3 text-xs font-semibold text-preparo">Obs.: {pedido.observacao}</p>
+      )}
+
       <div className="flex gap-2">
-        <button className="btn btn-ouro flex-1 py-2 text-sm" onClick={aoAvancar}>
-          {rotuloAcao}
-        </button>
+        {rotuloAcao && (
+          <button className="btn btn-ouro flex-1 py-2 text-sm" onClick={aoAvancar}>
+            {rotuloAcao}
+          </button>
+        )}
         <Link
           href={`/imprimir/${pedido.id}`}
           className="btn btn-quieto px-3 py-2 text-sm"

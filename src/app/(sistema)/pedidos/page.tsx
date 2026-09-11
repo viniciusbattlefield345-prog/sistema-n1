@@ -12,7 +12,7 @@ export default async function PaginaPedidos() {
 
   const { data } = await supabase
     .from("pedidos")
-    .select("*, itens_pedido(*, item_adicionais(*))")
+    .select("*, mesas(numero), itens_pedido(*, item_adicionais(*))")
     .gte("criado_em", desde)
     .order("criado_em", { ascending: false });
 

@@ -1,17 +1,17 @@
 "use client";
 
 import { numero, totalItem } from "@/lib/formato";
-import type { ItemCarrinho, TipoEntrega } from "@/lib/tipos";
+import type { ItemCarrinho, TipoPedido } from "@/lib/tipos";
 
 /**
  * A comanda e o cupom.
- * O que aparece aqui e exatamente o que sai na Tanca — mesma fonte,
- * mesmas linhas tracejadas, mesma coluna de valor. A atendente confere
- * o papel antes de gastar papel.
+ * O que aparece aqui é o que sai na impressora — mesma fonte, mesmas
+ * linhas tracejadas, mesma coluna de valor. Dá pra conferir antes de lançar.
  */
 export function Comanda({
   itens,
   tipo,
+  mesaNumero,
   clienteNome,
   endereco,
   taxa,
@@ -20,7 +20,8 @@ export function Comanda({
   aoMudarQuantidade,
 }: {
   itens: ItemCarrinho[];
-  tipo: TipoEntrega;
+  tipo: TipoPedido;
+  mesaNumero: number | null;
   clienteNome: string;
   endereco: string;
   taxa: number;
@@ -30,27 +31,30 @@ export function Comanda({
 }) {
   const subtotal = itens.reduce((s, i) => s + totalItem(i), 0);
   const total = Math.max(subtotal + taxa - desconto, 0);
+  const rotulo =
+    tipo === "MESA" ? (mesaNumero ? `MESA ${mesaNumero}` : "MESA —") : tipo;
 
   return (
     <div className="cupom flex min-h-0 flex-1 flex-col bg-carvao px-4 py-3 text-creme">
       {/* cabecalho do cupom */}
       <div className="text-center">
-        <p className="font-display text-base uppercase tracking-[0.1em] text-ouro">
-          N°1 Restaurante e Choperia
+        <p className="font-display text-base font-extrabold uppercase tracking-[0.1em] text-ouro">
+          General Burguer
         </p>
-        <p className="text-[0.7rem] text-creme-fraco">Estação do Chopp</p>
       </div>
 
       <div className="cupom-linha my-2" />
 
       <div className="flex justify-between text-[0.72rem] text-creme-suave">
-        <span>{tipo === "ENTREGA" ? "ENTREGA" : "RETIRADA"}</span>
+        <span className="font-bold text-creme">{rotulo}</span>
         <span>Pedido #—</span>
       </div>
 
-      <p className="mt-1 truncate font-bold uppercase">
-        {clienteNome.trim() || <span className="text-creme-fraco">Sem cliente</span>}
-      </p>
+      {clienteNome.trim() ? (
+        <p className="mt-1 truncate font-bold uppercase">{clienteNome}</p>
+      ) : (
+        tipo !== "MESA" && <p className="mt-1 text-creme-fraco">Sem cliente</p>
+      )}
       {tipo === "ENTREGA" && endereco.trim() && (
         <p className="text-[0.72rem] leading-snug text-creme-suave">{endereco}</p>
       )}
@@ -94,8 +98,8 @@ export function Comanda({
                   </span>
                 </div>
 
-                {/* controles: discretos ate passar o mouse/foco */}
-                <div className="mt-1 flex gap-1 pl-7 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                {/* controles: discretos ate passar o mouse/foco; sempre visiveis no toque */}
+                <div className="mt-1 flex gap-1 pl-7 transition-opacity focus-within:opacity-100 group-hover:opacity-100 [@media(hover:hover)]:opacity-0">
                   <button
                     type="button"
                     onClick={() => aoMudarQuantidade(item.chave, -1)}
@@ -137,8 +141,8 @@ export function Comanda({
       </div>
 
       <div className="mt-2 flex items-baseline justify-between border-t-2 border-borda-forte pt-2">
-        <span className="font-display text-lg uppercase tracking-wide">Total</span>
-        <span className="font-display text-3xl font-bold text-ouro tabular">
+        <span className="font-display text-lg font-bold uppercase tracking-wide">Total</span>
+        <span className="font-display text-3xl font-extrabold text-ouro tabular">
           {numero(total)}
         </span>
       </div>

@@ -2,20 +2,21 @@
 
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
-import type { FormaPagamento, TipoEntrega } from "@/lib/tipos";
+import {
+  contaDaMesa,
+  gravarPedido,
+  mandarImprimir,
+  montarItens,
+  type ItemEnviado,
+} from "@/lib/pedido-servidor";
+import type { FormaPagamento, TipoPedido } from "@/lib/tipos";
 
-/** O que o navegador manda. Repare: nenhum preco vem daqui. */
-export interface ItemEnviado {
-  produto_id: number;
-  variacao_id: number | null;
-  quantidade: number;
-  observacao: string;
-  adicionais: number[]; // ids
-}
+export type { ItemEnviado };
 
 export interface PedidoEnviado {
   caixa_id: number;
-  tipo_entrega: TipoEntrega;
+  tipo: TipoPedido;
+  mesa_id: number | null;
   cliente_id: number | null;
   cliente_nome: string;
   cliente_telefone: string | null;
@@ -29,9 +30,14 @@ export interface PedidoEnviado {
 }
 
 export type Resultado =
-  | { ok: true; pedido_id: number; numero_dia: number | null }
+  | { ok: true; pedido_id: number; numero_dia: number | null; mesa_id: number | null }
   | { ok: false; erro: string };
 
+/**
+ * Pedido lançado pela equipe. Não passa por aprovação: já nasce na fila da
+ * cozinha e vai direto pra impressora do balcão. Pedido de mesa entra na
+ * conta aberta dela (e abre uma, se a mesa estava livre).
+ */
 export async function salvarPedido(dados: PedidoEnviado): Promise<Resultado> {
   const supabase = await criarClienteServidor();
 
@@ -40,48 +46,39 @@ export async function salvarPedido(dados: PedidoEnviado): Promise<Resultado> {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, erro: "Sessão expirada. Entre de novo." };
 
-  if (dados.itens.length === 0)
-    return { ok: false, erro: "O pedido está sem itens." };
+  const ehMesa = dados.tipo === "MESA";
 
-  if (!dados.cliente_nome.trim())
+  if (!ehMesa && !dados.cliente_nome.trim())
     return { ok: false, erro: "Informe o nome do cliente." };
 
-  if (dados.tipo_entrega === "ENTREGA" && !dados.endereco_entrega?.trim())
+  if (dados.tipo === "ENTREGA" && !dados.endereco_entrega?.trim())
     return { ok: false, erro: "Entrega precisa de endereço." };
 
-  // ---- Precos vem SEMPRE do banco, nunca do navegador ----------------
-  const idsProduto = [...new Set(dados.itens.map((i) => i.produto_id))];
-  const idsVariacao = [
-    ...new Set(dados.itens.map((i) => i.variacao_id).filter((v): v is number => v !== null)),
-  ];
-  const idsAdicional = [...new Set(dados.itens.flatMap((i) => i.adicionais))];
+  // ---- Preços vêm SEMPRE do banco, nunca do navegador ----------------
+  const montagem = await montarItens(supabase, dados.itens, false);
+  if (!montagem.ok) return montagem;
 
-  const [produtosRes, variacoesRes, adicionaisRes] = await Promise.all([
-    supabase.from("produtos").select("id, nome, preco_base").in("id", idsProduto),
-    idsVariacao.length
-      ? supabase.from("produto_variacoes").select("id, nome, preco, produto_id").in("id", idsVariacao)
-      : Promise.resolve({ data: [], error: null }),
-    idsAdicional.length
-      ? supabase.from("adicionais").select("id, nome, preco").in("id", idsAdicional)
-      : Promise.resolve({ data: [], error: null }),
-  ]);
+  // ---- Mesa: entra na conta aberta ----------------------------------
+  let comanda: { id: number; nova: boolean } | null = null;
+  let nomeMesa = "";
+  if (ehMesa) {
+    if (!dados.mesa_id) return { ok: false, erro: "Escolha a mesa." };
+    const { data: mesa } = await supabase
+      .from("mesas")
+      .select("id, numero, ativo")
+      .eq("id", dados.mesa_id)
+      .maybeSingle();
+    if (!mesa || !mesa.ativo) return { ok: false, erro: "Essa mesa não está ativa." };
 
-  const produtos = new Map((produtosRes.data ?? []).map((p) => [p.id, p]));
-  const variacoes = new Map((variacoesRes.data ?? []).map((v) => [v.id, v]));
-  const extras = new Map((adicionaisRes.data ?? []).map((a) => [a.id, a]));
-
-  for (const item of dados.itens) {
-    if (!produtos.has(item.produto_id))
-      return { ok: false, erro: "Um dos produtos saiu do cardápio. Refaça o item." };
-    if (item.variacao_id !== null && !variacoes.has(item.variacao_id))
-      return { ok: false, erro: "Um dos tamanhos saiu do cardápio. Refaça o item." };
-    if (!(item.quantidade > 0))
-      return { ok: false, erro: "Quantidade inválida." };
+    const conta = await contaDaMesa(supabase, mesa.id, dados.caixa_id);
+    if (!conta.ok) return conta;
+    comanda = { id: conta.id, nova: conta.nova };
+    nomeMesa = `Mesa ${mesa.numero}`;
   }
 
-  // ---- Taxa de entrega: tambem do banco ------------------------------
+  // ---- Taxa de entrega: também do banco ------------------------------
   let taxa = 0;
-  if (dados.tipo_entrega === "ENTREGA" && dados.bairro_id) {
+  if (dados.tipo === "ENTREGA" && dados.bairro_id) {
     const { data: bairro } = await supabase
       .from("bairros")
       .select("taxa")
@@ -90,81 +87,53 @@ export async function salvarPedido(dados: PedidoEnviado): Promise<Resultado> {
     taxa = Number(bairro?.taxa ?? 0);
   }
 
-  // ---- Cabecalho -----------------------------------------------------
-  const { data: pedido, error: erroPedido } = await supabase
-    .from("pedidos")
-    .insert({
+  const agora = new Date().toISOString();
+  const resultado = await gravarPedido(
+    supabase,
+    {
       caixa_id: dados.caixa_id,
       usuario_id: user.id,
-      cliente_id: dados.cliente_id,
-      cliente_nome: dados.cliente_nome.trim(),
-      cliente_telefone: dados.cliente_telefone,
-      tipo_entrega: dados.tipo_entrega,
+      origem: "EQUIPE",
+      tipo: dados.tipo,
+      mesa_id: ehMesa ? dados.mesa_id : null,
+      comanda_id: comanda?.id ?? null,
+      cliente_id: dados.tipo === "ENTREGA" ? dados.cliente_id : null,
+      cliente_nome: dados.cliente_nome.trim() || nomeMesa,
+      cliente_telefone: ehMesa ? null : dados.cliente_telefone,
       endereco_entrega:
-        dados.tipo_entrega === "ENTREGA"
+        dados.tipo === "ENTREGA"
           ? dados.endereco_entrega
-          : "RETIRADA NO BALCÃO",
+          : dados.tipo === "RETIRADA"
+            ? "RETIRADA NO BALCÃO"
+            : null,
       taxa_entrega: taxa,
       desconto: dados.desconto,
-      forma_pagamento: dados.forma_pagamento,
-      troco_para: dados.forma_pagamento === "Dinheiro" ? dados.troco_para : null,
+      forma_pagamento: ehMesa ? null : dados.forma_pagamento,
+      troco_para: !ehMesa && dados.forma_pagamento === "Dinheiro" ? dados.troco_para : null,
+      status: "PENDENTE",
+      aprovado_por: user.id,
+      aprovado_em: agora,
       observacao: dados.observacao,
-    })
-    .select("id, numero_dia")
-    .single();
-
-  if (erroPedido || !pedido)
-    return { ok: false, erro: erroPedido?.message ?? "Não consegui abrir o pedido." };
-
-  // ---- Itens ---------------------------------------------------------
-  const { data: itensSalvos, error: erroItens } = await supabase
-    .from("itens_pedido")
-    .insert(
-      dados.itens.map((item) => {
-        const produto = produtos.get(item.produto_id)!;
-        const variacao = item.variacao_id ? variacoes.get(item.variacao_id)! : null;
-        return {
-          pedido_id: pedido.id,
-          produto_id: produto.id,
-          variacao_id: variacao?.id ?? null,
-          produto_nome: produto.nome,
-          variacao_nome: variacao?.nome ?? null,
-          quantidade: item.quantidade,
-          preco_unitario: Number(variacao ? variacao.preco : produto.preco_base),
-          observacao: item.observacao.trim() || null,
-        };
-      }),
-    )
-    .select("id");
-
-  if (erroItens || !itensSalvos) {
-    // Sem itens o pedido nao serve pra nada: desfaz o cabecalho.
-    await supabase.from("pedidos").delete().eq("id", pedido.id);
-    return { ok: false, erro: erroItens?.message ?? "Não consegui salvar os itens." };
-  }
-
-  // ---- Adicionais ----------------------------------------------------
-  const linhasExtras = dados.itens.flatMap((item, indice) =>
-    item.adicionais
-      .map((id) => extras.get(id))
-      .filter((a) => a !== undefined)
-      .map((a) => ({
-        item_id: itensSalvos[indice].id,
-        adicional_id: a.id,
-        nome: a.nome,
-        preco: Number(a.preco),
-        quantidade: 1,
-      })),
+    },
+    montagem.itens,
   );
 
-  if (linhasExtras.length > 0) {
-    const { error } = await supabase.from("item_adicionais").insert(linhasExtras);
-    if (error) return { ok: false, erro: error.message };
+  if (!resultado.ok) {
+    if (comanda?.nova) {
+      await supabase.from("comandas").update({ status: "CANCELADA" }).eq("id", comanda.id);
+    }
+    return resultado;
   }
 
-  revalidatePath("/cozinha");
-  revalidatePath("/pedidos");
-  return { ok: true, pedido_id: pedido.id, numero_dia: pedido.numero_dia };
+  await mandarImprimir(supabase, { tipo: "PEDIDO", pedido_id: resultado.id }, user.id);
+
+  for (const tela of ["/cozinha", "/pedidos", "/mesas", "/impressao"]) revalidatePath(tela);
+  return {
+    ok: true,
+    pedido_id: resultado.id,
+    numero_dia: resultado.numero_dia,
+    mesa_id: ehMesa ? dados.mesa_id : null,
+  };
 }
 
 /** Cadastro rapido de cliente, direto do PDV. */

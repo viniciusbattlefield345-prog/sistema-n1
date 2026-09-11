@@ -1,134 +1,156 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
-import { viaCozinha, viaEntrega } from "@/lib/cupom";
+import { viaPedido } from "@/lib/cupom";
 import { imprimirCru } from "@/lib/impressora";
-import { numero, numeroPedido, hora, telefone } from "@/lib/formato";
-import type { ConfigImpressoras, ConfigRestaurante, Pedido } from "@/lib/tipos";
+import { useAoVivo } from "@/lib/aoVivo";
+import { reimprimirPedido, tentarImpressaoDeNovo } from "../../mesas/acoes";
+import {
+  hora,
+  nomePagamento,
+  numero,
+  numeroPedido,
+  rotuloPedido,
+  telefone,
+} from "@/lib/formato";
+import type {
+  ConfigImpressoras,
+  ConfigRestaurante,
+  Pedido,
+  TrabalhoImpressao,
+} from "@/lib/tipos";
 
-type Estado = "pronto" | "imprimindo" | "impresso" | "erro";
-
+/**
+ * O cupom de um pedido. A impressão normal já foi pra fila da impressora do
+ * balcão quando o pedido foi lançado ou aprovado — aqui dá pra acompanhar,
+ * mandar de novo, imprimir direto deste computador ou salvar em PDF.
+ */
 export function PainelImpressao({
   pedido,
   restaurante,
   impressoras,
+  impressoes,
 }: {
   pedido: Pedido;
   restaurante: ConfigRestaurante;
   impressoras: ConfigImpressoras;
+  impressoes: TrabalhoImpressao[];
 }) {
-  const [estado, setEstado] = useState<Estado>("pronto");
-  const [mensagem, setMensagem] = useState("");
-  const [jaTentou, setJaTentou] = useState(false);
+  useAoVivo(["fila_impressao"]);
 
-  const imprimir = useCallback(
-    async (quais: "tudo" | "cozinha" | "entrega") => {
-      setEstado("imprimindo");
-      setMensagem("");
-      try {
-        if (quais !== "entrega") {
-          await imprimirCru(
-            impressoras.cozinha,
-            viaCozinha(pedido, impressoras),
-            impressoras.vias_cozinha,
-          );
-        }
-        if (quais !== "cozinha") {
-          await imprimirCru(
-            impressoras.entrega,
-            viaEntrega(pedido, restaurante, impressoras),
-            impressoras.vias_entrega,
-          );
-        }
-        setEstado("impresso");
-      } catch (e) {
-        setEstado("erro");
-        setMensagem(
-          e instanceof Error ? e.message : "Não consegui falar com a impressora.",
-        );
-      }
-    },
-    [pedido, restaurante, impressoras],
-  );
+  const [mensagem, setMensagem] = useState<{ tom: "ok" | "erro"; texto: string } | null>(null);
+  const [ocupado, iniciar] = useTransition();
 
-  // Imprime sozinho ao abrir: o fluxo normal é fechar o pedido e o papel sair.
-  useEffect(() => {
-    if (jaTentou) return;
-    setJaTentou(true);
-    void imprimir("tudo");
-  }, [jaTentou, imprimir]);
-
+  const ultima = impressoes[0] ?? null;
   const itens = pedido.itens_pedido ?? [];
+  const rotulo = rotuloPedido(pedido);
+
+  function mandarPraFila() {
+    setMensagem(null);
+    iniciar(async () => {
+      const r = await reimprimirPedido(pedido.id);
+      setMensagem(
+        r.ok
+          ? { tom: "ok", texto: "Mandado pra impressora do balcão." }
+          : { tom: "erro", texto: r.erro },
+      );
+    });
+  }
+
+  async function imprimirAqui() {
+    setMensagem(null);
+    try {
+      await imprimirCru(
+        impressoras.impressora,
+        viaPedido(pedido, restaurante, impressoras),
+        impressoras.vias,
+      );
+      setMensagem({ tom: "ok", texto: "Impresso por este computador." });
+    } catch (e) {
+      setMensagem({
+        tom: "erro",
+        texto: e instanceof Error ? e.message : "Não consegui falar com a impressora.",
+      });
+    }
+  }
 
   return (
     <div className="folha-raiz mx-auto flex max-w-3xl flex-col gap-6 p-4 lg:p-8">
       <div className="nao-imprimir flex items-start justify-between gap-6">
         <div>
           <span className="fita mb-3">Pedido {numeroPedido(pedido.numero_dia)}</span>
-          <h1 className="font-display text-3xl uppercase tracking-wide text-creme">
-            {pedido.cliente_nome}
+          <h1 className="font-display text-3xl font-extrabold uppercase tracking-wide text-creme">
+            {rotulo}
           </h1>
           <p className="text-sm text-creme-suave">
-            {pedido.tipo_entrega === "ENTREGA" ? "Entrega" : "Retirada"} ·{" "}
-            {hora(pedido.criado_em)} · {pedido.forma_pagamento}
+            {pedido.cliente_nome !== rotulo && `${pedido.cliente_nome} · `}
+            {hora(pedido.criado_em)}
+            {pedido.forma_pagamento && ` · ${nomePagamento(pedido.forma_pagamento)}`}
           </p>
         </div>
-        <Link href="/pdv" className="btn btn-quieto shrink-0">
-          Novo pedido
-        </Link>
+        {pedido.tipo === "MESA" && pedido.mesa_id ? (
+          <Link href={`/mesas/${pedido.mesa_id}`} className="btn btn-quieto shrink-0">
+            Voltar pra mesa
+          </Link>
+        ) : (
+          <Link href="/pdv" className="btn btn-quieto shrink-0">
+            Novo pedido
+          </Link>
+        )}
       </div>
 
-      {/* estado da impressão */}
+      {/* situação na fila da impressora */}
       <div
         role="status"
         className={
           "nao-imprimir rounded-xl border px-4 py-3 text-sm " +
-          (estado === "erro"
+          (ultima?.status === "ERRO"
             ? "border-cancelado/40 bg-cancelado/10 text-cancelado"
-            : estado === "impresso"
+            : ultima?.status === "IMPRESSO"
               ? "border-pronto/40 bg-pronto/10 text-pronto"
               : "border-borda bg-carvao text-creme-suave")
         }
       >
-        {estado === "imprimindo" && "Enviando para a impressora…"}
-        {estado === "impresso" && "Cupom impresso. Pode montar o pedido."}
-        {estado === "pronto" && "Pronto para imprimir."}
-        {estado === "erro" && (
+        {!ultima && "Este pedido ainda não foi pra impressora."}
+        {ultima?.status === "PENDENTE" &&
+          "Na fila da impressora do balcão. Sai assim que a tela Impressão pegar."}
+        {ultima?.status === "IMPRIMINDO" && "Imprimindo no balcão…"}
+        {ultima?.status === "IMPRESSO" && `Impresso no balcão às ${hora(ultima.atualizado_em)}.`}
+        {ultima?.status === "ERRO" && (
           <>
             <strong className="block">Não imprimiu.</strong>
-            {mensagem}
+            {ultima.erro}{" "}
             <button
-              onClick={() => window.print()}
-              className="mt-2 block underline underline-offset-2"
+              type="button"
+              onClick={() => iniciar(async () => void (await tentarImpressaoDeNovo(ultima.id)))}
+              className="underline underline-offset-2"
             >
-              Imprimir pelo navegador ou salvar em PDF
+              Tentar de novo
             </button>
           </>
         )}
       </div>
 
+      {mensagem && (
+        <p
+          className={
+            "nao-imprimir rounded-xl border px-4 py-3 text-sm " +
+            (mensagem.tom === "ok"
+              ? "border-pronto/40 bg-pronto/10 text-pronto"
+              : "border-cancelado/40 bg-cancelado/10 text-cancelado")
+          }
+        >
+          {mensagem.texto}
+        </p>
+      )}
+
       <div className="nao-imprimir flex flex-wrap gap-2">
-        <button
-          className="btn btn-ouro"
-          onClick={() => imprimir("tudo")}
-          disabled={estado === "imprimindo"}
-        >
-          Imprimir as duas vias
+        <button className="btn btn-ouro" onClick={mandarPraFila} disabled={ocupado}>
+          Mandar pra impressora do balcão
         </button>
-        <button
-          className="btn btn-quieto"
-          onClick={() => imprimir("cozinha")}
-          disabled={estado === "imprimindo"}
-        >
-          Só cozinha
-        </button>
-        <button
-          className="btn btn-quieto"
-          onClick={() => imprimir("entrega")}
-          disabled={estado === "imprimindo"}
-        >
-          Só entrega
+        <button className="btn btn-quieto" onClick={imprimirAqui} disabled={!impressoras.impressora}>
+          Imprimir neste computador
         </button>
         <button className="btn btn-quieto" onClick={() => window.print()}>
           Ver / salvar em PDF
@@ -137,26 +159,27 @@ export function PainelImpressao({
 
       {/* pré-visualização: o mesmo cupom que sai no papel */}
       <div className="folha cupom w-full max-w-[340px] rounded-lg border border-borda bg-carvao p-4">
-        <p className="text-center font-display text-base uppercase tracking-[0.1em] text-ouro">
-          {restaurante?.nome ?? "N°1 Restaurante e Choperia"}
+        <p className="text-center font-display text-base font-extrabold uppercase tracking-[0.1em] text-ouro">
+          {restaurante.nome || "General Burguer"}
         </p>
-        <p className="text-center text-[0.7rem] text-creme-fraco">
-          {restaurante?.endereco}
-        </p>
+        {restaurante.endereco && (
+          <p className="text-center text-[0.7rem] text-creme-fraco">{restaurante.endereco}</p>
+        )}
 
         <div className="cupom-linha my-2" />
-        <p className="text-center font-display text-3xl font-bold text-creme">
-          {numeroPedido(pedido.numero_dia)}
+        <p className="text-center font-display text-3xl font-extrabold uppercase text-creme">
+          {rotulo}
         </p>
+        <p className="text-center font-bold">PEDIDO {numeroPedido(pedido.numero_dia)}</p>
         <div className="cupom-linha my-2" />
 
-        <p className="font-bold uppercase">{pedido.cliente_nome}</p>
+        {pedido.cliente_nome !== rotulo && <p className="font-bold uppercase">{pedido.cliente_nome}</p>}
         {pedido.cliente_telefone && (
           <p className="text-creme-suave">{telefone(pedido.cliente_telefone)}</p>
         )}
-        <p className="text-[0.72rem] leading-snug text-creme-suave">
-          {pedido.endereco_entrega}
-        </p>
+        {pedido.tipo === "ENTREGA" && (
+          <p className="text-[0.72rem] leading-snug text-creme-suave">{pedido.endereco_entrega}</p>
+        )}
 
         <div className="cupom-linha-forte my-2" />
 
@@ -194,9 +217,11 @@ export function PainelImpressao({
         })}
 
         <div className="cupom-linha my-2" />
-        <Par rotulo="Subtotal" valor={Number(pedido.subtotal)} />
         {Number(pedido.taxa_entrega) > 0 && (
-          <Par rotulo="Taxa de entrega" valor={Number(pedido.taxa_entrega)} />
+          <>
+            <Par rotulo="Subtotal" valor={Number(pedido.subtotal)} />
+            <Par rotulo="Taxa de entrega" valor={Number(pedido.taxa_entrega)} />
+          </>
         )}
         <div className="mt-1 flex justify-between border-t-2 border-borda-forte pt-1 text-base font-bold">
           <span>TOTAL</span>
@@ -204,16 +229,24 @@ export function PainelImpressao({
         </div>
 
         <div className="cupom-linha my-2" />
-        <p className="font-bold">PAGAMENTO: {pedido.forma_pagamento}</p>
-        {pedido.forma_pagamento === "Dinheiro" && Number(pedido.troco_para) > 0 && (
+        {pedido.tipo === "MESA" ? (
+          <p className="text-center">Entra na conta da mesa</p>
+        ) : (
           <>
-            <Par rotulo="Levar troco para" valor={Number(pedido.troco_para)} />
-            <div className="flex justify-between text-base font-bold">
-              <span>TROCO</span>
-              <span className="tabular">
-                {numero(Math.max(Number(pedido.troco_para) - Number(pedido.total), 0))}
-              </span>
-            </div>
+            <p className="font-bold">
+              PAGAMENTO: {pedido.forma_pagamento ? nomePagamento(pedido.forma_pagamento) : "-"}
+            </p>
+            {pedido.forma_pagamento === "Dinheiro" && Number(pedido.troco_para) > 0 && (
+              <>
+                <Par rotulo="Troco para" valor={Number(pedido.troco_para)} />
+                <div className="flex justify-between text-base font-bold">
+                  <span>TROCO</span>
+                  <span className="tabular">
+                    {numero(Math.max(Number(pedido.troco_para) - Number(pedido.total), 0))}
+                  </span>
+                </div>
+              </>
+            )}
           </>
         )}
       </div>

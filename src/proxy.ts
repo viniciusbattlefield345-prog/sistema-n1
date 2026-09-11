@@ -4,7 +4,17 @@ import { NextResponse, type NextRequest } from "next/server";
 /** Rotas que abrem sem login. */
 const PUBLICAS = ["/login", "/auth"];
 
+/**
+ * Nem sessão precisam: o cardápio que o cliente abre pelo QR da mesa, e as
+ * imagens geradas (ícone e prévia do WhatsApp, que o robô do WhatsApp busca
+ * sem estar logado).
+ */
+const SEM_SESSAO = ["/m/", "/icon", "/apple-icon", "/opengraph-image"];
+
 export async function proxy(request: NextRequest) {
+  const caminho = request.nextUrl.pathname;
+  if (SEM_SESSAO.some((p) => caminho.startsWith(p))) return NextResponse.next();
+
   let resposta = NextResponse.next({ request });
 
   // Sem Supabase configurado ainda: deixa navegar em vez de derrubar tudo
@@ -41,7 +51,6 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const caminho = request.nextUrl.pathname;
   const ehPublica = PUBLICAS.some((p) => caminho.startsWith(p));
 
   if (!user && !ehPublica) {
@@ -53,7 +62,7 @@ export async function proxy(request: NextRequest) {
 
   if (user && caminho === "/login") {
     const url = request.nextUrl.clone();
-    url.pathname = "/pdv";
+    url.pathname = "/mesas";
     url.search = "";
     return NextResponse.redirect(url);
   }

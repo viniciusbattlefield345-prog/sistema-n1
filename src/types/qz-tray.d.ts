@@ -55,7 +55,8 @@ declare module "qz-tray" {
   export const security: {
     setCertificatePromise(
       resolver: (
-        resolve: (certificado: string) => void,
+        // sem certificado (undefined) o QZ trabalha em modo anônimo e pergunta
+        resolve: (certificado?: string) => void,
         reject: (erro: unknown) => void,
       ) => void,
     ): void;

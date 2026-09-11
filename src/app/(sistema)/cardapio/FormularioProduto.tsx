@@ -1,11 +1,36 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { salvarProduto, type DadosProduto } from "./acoes";
+import { enviarFoto, salvarProduto, type DadosProduto } from "./acoes";
 import { paraNumero, numero } from "@/lib/formato";
 import type { Adicional, Categoria, Produto } from "@/lib/tipos";
 
 type Tamanho = { nome: string; preco: string };
+
+/**
+ * Foto de celular tem 4000px e 5 MB. No cardápio ela aparece com 100px:
+ * reduz aqui mesmo, no navegador, antes de subir — o cliente na mesa
+ * agradece no 4G.
+ */
+async function reduzirImagem(arquivo: File): Promise<Blob> {
+  const bitmap = await createImageBitmap(arquivo);
+  const escala = Math.min(1, 1000 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * escala);
+  canvas.height = Math.round(bitmap.height * escala);
+  canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+
+  const gerar = (tipo: string, qualidade: number) =>
+    new Promise<Blob | null>((ok) => canvas.toBlob(ok, tipo, qualidade));
+
+  // Navegador que não sabe gerar WebP devolve PNG pesado: aí vai JPEG.
+  const webp = await gerar("image/webp", 0.82);
+  if (webp && webp.type === "image/webp") return webp;
+  const jpeg = await gerar("image/jpeg", 0.85);
+  if (!jpeg) throw new Error("Não consegui ler essa imagem.");
+  return jpeg;
+}
 
 export function FormularioProduto({
   produto,
@@ -23,6 +48,8 @@ export function FormularioProduto({
   const [categoriaId, setCategoriaId] = useState<number | null>(
     produto?.categoria_id ?? categorias[0]?.id ?? null,
   );
+  const [fotoUrl, setFotoUrl] = useState<string | null>(produto?.foto_url ?? null);
+  const [enviandoFoto, setEnviandoFoto] = useState(false);
   const [precoBase, setPrecoBase] = useState(
     produto && (produto.produto_variacoes?.length ?? 0) === 0
       ? numero(Number(produto.preco_base))
@@ -50,12 +77,30 @@ export function FormularioProduto({
   const grupos = useMemo(() => {
     const mapa = new Map<string, Adicional[]>();
     for (const a of adicionais) {
-      const chave = a.grupo?.trim() || "Sem seção";
+      const chave = a.grupo?.trim() || "Adicionais";
       if (!mapa.has(chave)) mapa.set(chave, []);
       mapa.get(chave)!.push(a);
     }
     return [...mapa.entries()];
   }, [adicionais]);
+
+  async function escolherFoto(arquivo: File | undefined) {
+    if (!arquivo) return;
+    setErro(null);
+    setEnviandoFoto(true);
+    try {
+      const imagem = await reduzirImagem(arquivo);
+      const form = new FormData();
+      form.append("foto", imagem, imagem.type === "image/webp" ? "foto.webp" : "foto.jpg");
+      const r = await enviarFoto(form);
+      if (!r.ok) setErro(r.erro);
+      else setFotoUrl(r.url);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não consegui usar essa imagem.");
+    } finally {
+      setEnviandoFoto(false);
+    }
+  }
 
   function enviar() {
     setErro(null);
@@ -64,6 +109,7 @@ export function FormularioProduto({
       categoria_id: categoriaId,
       nome,
       descricao,
+      foto_url: fotoUrl,
       preco_base: paraNumero(precoBase),
       ativo: produto?.ativo ?? true,
       disponivel: produto?.disponivel ?? true,
@@ -103,13 +149,52 @@ export function FormularioProduto({
         }}
       >
         <header className="border-b border-borda px-6 py-4">
-          <h2 className="font-display text-xl uppercase tracking-wide text-creme">
+          <h2 className="font-display text-xl font-bold uppercase tracking-wide text-creme">
             {produto ? "Editar produto" : "Novo produto"}
           </h2>
         </header>
 
         <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
-          <div className="grid grid-cols-[1fr_12rem] gap-3">
+          {/* foto */}
+          <div className="flex items-center gap-4">
+            <div className="grid size-24 shrink-0 place-items-center overflow-hidden rounded-2xl border border-borda bg-breu">
+              {fotoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={fotoUrl} alt="" className="size-full object-cover" />
+              ) : (
+                <span className="px-2 text-center text-[0.65rem] uppercase tracking-wide text-creme-fraco">
+                  Sem foto
+                </span>
+              )}
+            </div>
+            <div className="flex flex-col items-start gap-2">
+              <label className={"btn btn-quieto cursor-pointer px-3 py-2 text-xs " + (enviandoFoto ? "opacity-50" : "")}>
+                {enviandoFoto ? "Enviando…" : fotoUrl ? "Trocar foto" : "Escolher foto"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  disabled={enviandoFoto}
+                  onChange={(e) => {
+                    void escolherFoto(e.target.files?.[0]);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+              {fotoUrl && (
+                <button
+                  type="button"
+                  className="text-xs text-creme-fraco underline hover:text-cancelado"
+                  onClick={() => setFotoUrl(null)}
+                >
+                  Tirar a foto
+                </button>
+              )}
+              <p className="text-xs text-creme-fraco">Aparece no cardápio que o cliente abre na mesa.</p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-[1fr_12rem]">
             <div>
               <label className="rotulo" htmlFor="p-nome">Nome</label>
               <input
@@ -119,7 +204,7 @@ export function FormularioProduto({
                 required
                 value={nome}
                 onChange={(e) => setNome(e.target.value)}
-                placeholder="Marmita"
+                placeholder="X Bacon"
               />
             </div>
             <div>
@@ -142,12 +227,13 @@ export function FormularioProduto({
 
           <div>
             <label className="rotulo" htmlFor="p-desc">Descrição</label>
-            <input
+            <textarea
               id="p-desc"
-              className="campo"
+              rows={2}
+              className="campo resize-none"
               value={descricao}
               onChange={(e) => setDescricao(e.target.value)}
-              placeholder="Escolha o tamanho e monte a marmita"
+              placeholder="Pão, bife, queijo, bacon, tomate, alface, milho e batata palha."
             />
           </div>
 
@@ -155,8 +241,8 @@ export function FormularioProduto({
           <fieldset>
             <legend className="rotulo">Tamanhos</legend>
             <p className="mb-2 text-xs text-creme-fraco">
-              Deixe vazio se o produto tem preço único. Com tamanhos, quem manda
-              no preço é o tamanho escolhido.
+              Deixe vazio se o produto tem preço único. Com tamanhos (ex.: refrigerante lata e 2L),
+              quem manda no preço é o tamanho escolhido.
             </p>
 
             <div className="space-y-2">
@@ -171,7 +257,7 @@ export function FormularioProduto({
                         a.map((x, j) => (j === i ? { ...x, nome: e.target.value } : x)),
                       )
                     }
-                    placeholder="P"
+                    placeholder="Lata"
                     aria-label={`Nome do tamanho ${i + 1}`}
                   />
                   <input
@@ -184,7 +270,7 @@ export function FormularioProduto({
                         a.map((x, j) => (j === i ? { ...x, preco: e.target.value } : x)),
                       )
                     }
-                    placeholder="18,00"
+                    placeholder="6,00"
                     aria-label={`Preço do tamanho ${i + 1}`}
                   />
                   <button
@@ -216,17 +302,17 @@ export function FormularioProduto({
                 inputMode="decimal"
                 value={precoBase}
                 onChange={(e) => setPrecoBase(e.target.value)}
-                placeholder="18,00"
+                placeholder="20,00"
               />
             </div>
           )}
 
-          {/* itens que o produto aceita */}
+          {/* adicionais que o produto aceita */}
           {adicionais.length > 0 && (
             <fieldset>
-              <legend className="rotulo">O que pode ir dentro</legend>
+              <legend className="rotulo">Adicionais que dá pra pedir junto</legend>
               <p className="mb-2 text-xs text-creme-fraco">
-                Marque o que a atendente poderá escolher ao montar este produto.
+                Marque o que o cliente (e a equipe) poderá escolher neste produto.
               </p>
 
               {grupos.map(([grupo, itens]) => (
@@ -286,7 +372,7 @@ export function FormularioProduto({
           )}
 
           <div className="w-32">
-            <label className="rotulo" htmlFor="p-ordem">Ordem no PDV</label>
+            <label className="rotulo" htmlFor="p-ordem">Ordem no cardápio</label>
             <input
               id="p-ordem"
               className="campo"
@@ -310,7 +396,7 @@ export function FormularioProduto({
           <button type="button" className="btn btn-quieto" onClick={aoFechar}>
             Cancelar
           </button>
-          <button type="submit" className="btn btn-ouro flex-1" disabled={salvando}>
+          <button type="submit" className="btn btn-ouro flex-1" disabled={salvando || enviandoFoto}>
             {salvando ? "Salvando…" : "Salvar produto"}
           </button>
         </footer>

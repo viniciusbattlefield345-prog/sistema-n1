@@ -65,7 +65,7 @@ export function FormularioLogin({ destino }: { destino: string }) {
           required
           autoFocus
           className="campo"
-          placeholder="arinete"
+          placeholder="seu usuário"
           value={usuario}
           onChange={(e) => setUsuario(e.target.value)}
         />

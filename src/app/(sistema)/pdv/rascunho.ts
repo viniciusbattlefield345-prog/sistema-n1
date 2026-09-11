@@ -1,10 +1,10 @@
-import type { FormaPagamento, ItemCarrinho, TipoEntrega } from "@/lib/tipos";
+import type { FormaPagamento, ItemCarrinho, TipoPedido } from "@/lib/tipos";
 
 /**
  * Rascunho do pedido guardado no navegador.
  *
  * O carrinho é estado de tela: sai do PDV, fecha a aba ou o navegador cai,
- * e o pedido some. No meio do almoço isso é perder a venda e ter que
+ * e o pedido some. No meio do movimento isso é perder a venda e ter que
  * perguntar tudo de novo ao cliente. Aqui ele sobrevive.
  *
  * Preço não é guardado como verdade: quem calcula o valor final é o
@@ -14,7 +14,8 @@ const CHAVE = "n1:rascunho-pedido";
 
 export interface Rascunho {
   itens: ItemCarrinho[];
-  tipo: TipoEntrega;
+  tipo: TipoPedido;
+  mesaId?: number | null;
   clienteId: number | null;
   nomeAvulso: string;
   forma: FormaPagamento;

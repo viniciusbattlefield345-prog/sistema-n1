@@ -1,36 +1,54 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# General Burguer — pedidos, mesas e delivery
 
-## Getting Started
+Sistema da lanchonete General Burguer. Next.js 16 + Supabase, publicado na Vercel.
 
-First, run the development server:
+- **Mesa com QR code:** o cliente lê o QR da mesa, monta o pedido no celular e envia.
+- **Aprovação:** o atendente aprova ou recusa pelo celular (tela **Mesas**).
+- **Impressão automática:** aprovou, o cupom completo sai na impressora do balcão
+  (tela **Impressão** aberta no PC + QZ Tray).
+- **Conta da mesa:** os pedidos somam na comanda; no fim o atendente imprime a conta
+  e fecha com uma ou mais formas de pagamento.
+- **Balcão e WhatsApp:** o PDV continua lançando retirada e entrega (com bairro e taxa).
+
+## Rodar no PC
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev -- --port 3400
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Precisa do `.env.local` (não vai pro Git):
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Variável | Pra quê |
+| --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | endereço do projeto Supabase |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | chave pública (publishable) |
+| `SUPABASE_SERVICE_ROLE_KEY` | chave secreta — cardápio da mesa, pedido do QR, fotos e criação de acessos |
+| `QZ_CHAVE_PRIVADA` | chave privada do certificado de impressão (sem ela, o QZ pergunta a cada cupom) |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+As mesmas variáveis precisam estar na Vercel (Settings → Environment Variables).
 
-## Learn More
+## Banco
 
-To learn more about Next.js, take a look at the following resources:
+`supabase/general-burguer.sql` monta tudo: tabelas, triggers, segurança, tempo real,
+pasta de fotos, cardápio e mesas 1 a 10. Roda inteiro no SQL Editor do Supabase.
+Ele recomeça do zero, mas **mantém os logins**.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Projeto novo, sem nenhum login ainda: crie o usuário em Authentication → Users e rode
+`supabase/03_dono.sql` para torná-lo dono.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Impressão
 
-## Deploy on Vercel
+A impressora térmica recebe ESC/POS (`src/lib/escpos.ts`, `src/lib/cupom.ts`) pelo
+QZ Tray, que roda no PC do balcão. O celular não alcança a impressora: aprovar coloca o
+cupom na tabela `fila_impressao`, e a tela `/impressao` — aberta no PC — pega e imprime.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Para o QZ não perguntar "permitir?" a cada cupom, cada impressão é assinada
+(`/api/qz/assinar`) com a chave de `QZ_CHAVE_PRIVADA`, e o PC confia no certificado
+`impressao/override.crt`. Passo a passo em `impressao/COMO-INSTALAR.txt`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## QR codes das mesas
+
+Menu **Mesas e QR codes** → **Imprimir QR codes**. O QR leva o endereço em que o sistema
+está aberto na hora de imprimir — **imprima pelo endereço definitivo do site**. Se o
+domínio mudar, os QR impressos param de funcionar.

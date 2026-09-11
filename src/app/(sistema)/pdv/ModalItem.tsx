@@ -162,7 +162,7 @@ export function ModalItem({
                         />
                         <span className="truncate">{a.nome}</span>
                       </span>
-                      {/* item de marmita nao custa nada: mostrar "+0,00" e ruido */}
+                      {/* adicional gratis: mostrar "+0,00" seria ruido */}
                       {custa && (
                         <span className="tabular shrink-0 text-xs">
                           +{numero(Number(a.preco))}

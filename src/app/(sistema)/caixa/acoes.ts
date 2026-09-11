@@ -40,6 +40,19 @@ export async function fecharCaixa(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, erro: "Sessão expirada." };
 
+  // Mesa com conta aberta ainda vai pagar: o dinheiro dela precisa entrar
+  // neste caixa, não sumir entre um fechamento e outro.
+  const { count: contasAbertas } = await supabase
+    .from("comandas")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "ABERTA");
+
+  if ((contasAbertas ?? 0) > 0)
+    return {
+      ok: false,
+      erro: `Ainda há ${contasAbertas} mesa(s) com conta aberta. Feche as contas antes de fechar o caixa.`,
+    };
+
   // Pedido em aberto some da cozinha quando o caixa fecha: melhor barrar.
   const { count } = await supabase
     .from("pedidos")

@@ -13,7 +13,7 @@ export async function entrar(
 ): Promise<EstadoLogin> {
   const usuario = String(form.get("usuario") ?? "").trim();
   const senha = String(form.get("senha") ?? "");
-  const voltar = String(form.get("voltar") ?? "/pdv");
+  const voltar = String(form.get("voltar") ?? "/mesas");
 
   if (!usuario || !senha) {
     return { erro: "Preencha o usuário e a senha." };
@@ -34,7 +34,7 @@ export async function entrar(
   }
 
   revalidatePath("/", "layout");
-  redirect(voltar.startsWith("/") ? voltar : "/pdv");
+  redirect(voltar.startsWith("/") ? voltar : "/mesas");
 }
 
 export async function sair() {

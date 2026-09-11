@@ -1,4 +1,4 @@
-import type { ItemCarrinho } from "./tipos";
+import type { FormaPagamento, ItemCarrinho, TipoPedido } from "./tipos";
 
 const MOEDA = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -21,6 +21,9 @@ export function paraNumero(texto: string): number {
   const n = Number.parseFloat(limpo);
   return Number.isFinite(n) ? n : 0;
 }
+
+/** Arredonda pro centavo: soma de float não fecha conta. */
+export const centavos = (v: number) => Math.round(v * 100) / 100;
 
 const FUSO = "America/Sao_Paulo";
 
@@ -47,6 +50,14 @@ export function minutosDesde(iso: string): number {
   return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
 }
 
+/** 45 -> "45 min" · 95 -> "1h35" */
+export function duracao(minutos: number): string {
+  if (minutos < 60) return `${minutos} min`;
+  const h = Math.floor(minutos / 60);
+  const m = minutos % 60;
+  return `${h}h${String(m).padStart(2, "0")}`;
+}
+
 /** 3 -> "#03" */
 export const numeroPedido = (n: number | null) =>
   "#" + String(n ?? 0).padStart(2, "0");
@@ -57,6 +68,32 @@ export function telefone(bruto: string | null | undefined): string {
   if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
   if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
   return bruto ?? "";
+}
+
+export const FORMAS_PAGAMENTO: FormaPagamento[] = [
+  "Dinheiro",
+  "Pix",
+  "Cartao Debito",
+  "Cartao Credito",
+];
+
+const NOME_PAGAMENTO: Record<FormaPagamento, string> = {
+  Dinheiro: "Dinheiro",
+  Pix: "Pix",
+  "Cartao Debito": "Cartão débito",
+  "Cartao Credito": "Cartão crédito",
+};
+
+/** "Cartao Debito" -> "Cartão débito" */
+export const nomePagamento = (f: FormaPagamento) => NOME_PAGAMENTO[f] ?? f;
+
+/** Como o pedido é chamado na tela e no papel: "Mesa 5", "Entrega", "Retirada". */
+export function rotuloPedido(p: {
+  tipo: TipoPedido;
+  mesas?: { numero: number } | null;
+}): string {
+  if (p.tipo === "MESA") return p.mesas ? `Mesa ${p.mesas.numero}` : "Mesa";
+  return p.tipo === "ENTREGA" ? "Entrega" : "Retirada";
 }
 
 /** Preco final de um item: base/variacao + adicionais, vezes a quantidade. */

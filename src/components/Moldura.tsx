@@ -1,17 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { BarraLateral } from "./BarraLateral";
 import { Marca } from "./Marca";
+import { criarClienteNavegador } from "@/lib/supabase/client";
+import { apitar, prepararSom } from "@/lib/som";
 import type { Papel } from "@/lib/tipos";
 
 /**
  * Moldura do sistema.
  *
  * No computador do caixa o menu fica sempre à vista. No celular ele viraria
- * 232px dos 375 disponíveis, então some e volta como gaveta — a dona precisa
- * conseguir olhar o movimento pelo telefone.
+ * 232px dos 375 disponíveis, então some e volta como gaveta.
  */
 export function Moldura({
   nome,
@@ -57,10 +59,7 @@ export function Moldura({
             <path d="M4 7h16M4 12h16M4 17h16" />
           </svg>
         </button>
-        <Marca tamanho={34} comFita={false} />
-        <span className="font-display text-sm uppercase tracking-[0.12em] text-creme">
-          N°1 Restaurante
-        </span>
+        <Marca tamanho={0.95} alinhamento="esquerda" emLinha />
       </header>
 
       {/* véu atrás da gaveta */}
@@ -75,6 +74,68 @@ export function Moldura({
       <BarraLateral nome={nome} papel={papel} aberto={aberto} />
 
       <main className="bg-breu lg:ml-[232px]">{children}</main>
+
+      {papel !== "cozinha" && <AvisoAguardando />}
     </div>
+  );
+}
+
+/**
+ * Pedido do QR esperando aprovação, em qualquer tela: o atendente pode
+ * estar no PDV ou no caixa quando o cliente pede. Apita quando a conta sobe.
+ */
+function AvisoAguardando() {
+  const [quantidade, setQuantidade] = useState(0);
+  const anterior = useRef<number | null>(null);
+  const caminho = usePathname();
+
+  useEffect(() => {
+    prepararSom();
+    const supabase = criarClienteNavegador();
+    let vivo = true;
+
+    async function contar() {
+      const { count } = await supabase
+        .from("pedidos")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "AGUARDANDO");
+      if (!vivo || count === null) return;
+      if (anterior.current !== null && count > anterior.current) apitar();
+      anterior.current = count;
+      setQuantidade(count);
+    }
+
+    void contar();
+    const canal = supabase
+      .channel(`aviso-aguardando-${Math.random().toString(36).slice(2)}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "pedidos" }, () => void contar())
+      .subscribe();
+    const relogio = setInterval(() => void contar(), 20000);
+    const aoVoltar = () => {
+      if (document.visibilityState === "visible") void contar();
+    };
+    document.addEventListener("visibilitychange", aoVoltar);
+
+    return () => {
+      vivo = false;
+      clearInterval(relogio);
+      document.removeEventListener("visibilitychange", aoVoltar);
+      void supabase.removeChannel(canal);
+    };
+  }, []);
+
+  if (quantidade === 0 || caminho === "/mesas") return null;
+
+  return (
+    <Link
+      href="/mesas"
+      className="nao-imprimir fixed right-3 top-[4.25rem] z-[45] flex items-center gap-2 rounded-full bg-ouro px-4 py-2.5 text-sm font-bold text-black shadow-lg shadow-black/60 lg:top-4"
+    >
+      <span className="relative flex size-2.5">
+        <span className="absolute inline-flex size-full animate-ping rounded-full bg-black opacity-60" />
+        <span className="relative inline-flex size-2.5 rounded-full bg-black" />
+      </span>
+      {quantidade} {quantidade === 1 ? "pedido esperando" : "pedidos esperando"}
+    </Link>
   );
 }

@@ -1,0 +1,30 @@
+/**
+ * Certificado público do General Burguer para o QZ Tray.
+ *
+ * É o mesmo conteúdo de impressao/override.crt — o arquivo que vai para a
+ * pasta do QZ Tray no PC do balcão. Público de propósito: sozinho ele não
+ * assina nada. A chave privada que casa com ele NÃO fica no Git; mora na
+ * variável QZ_CHAVE_PRIVADA do servidor.
+ */
+export const CERTIFICADO_QZ = `-----BEGIN CERTIFICATE-----
+MIIDYzCCAkugAwIBAgIUPuslClUcxfSBFrD3AcnokmWfRakwDQYJKoZIhvcNAQEL
+BQAwQTELMAkGA1UEBhMCQlIxGDAWBgNVBAoMD0dlbmVyYWwgQnVyZ3VlcjEYMBYG
+A1UEAwwPR2VuZXJhbCBCdXJndWVyMB4XDTI2MDkxMTE1MzM1NFoXDTQ2MDkwNjE1
+MzM1NFowQTELMAkGA1UEBhMCQlIxGDAWBgNVBAoMD0dlbmVyYWwgQnVyZ3VlcjEY
+MBYGA1UEAwwPR2VuZXJhbCBCdXJndWVyMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A
+MIIBCgKCAQEAxZ7ZNwHl8HWl4WBCjn+4pjP8IuEA4mGIWwSHQXXFDgZRb2wjY3Pi
+7ZkBRrkCGn4KyOPbobhclnjumtusg6PODvzm+za+UHo+jW7X/Mu+eeletdRU9rFh
+XIjVGte7+zIwDoq5agHB1wQYigYe88p4ErAiW4zgZxNR/k/02U5yOI07A2vd9Xws
+1lZiMlQYnKjB/R+0Dp/3Q1jmV2uNPAh/IKs22/U9SBAZ0byvFjxg/pX2PUbxFEp5
+w87SxAWOkuiFOkeseoPQqg0IO3GVsY9fFRfoNBBPifs/tX0A+c2tHtzoSTqqnyd7
+v9ubp70FoQIu8KI8B/tbLVN3nVNyYTJIIQIDAQABo1MwUTAdBgNVHQ4EFgQU7/2m
+ydQjbKVSmlrcHh23jgDbXLYwHwYDVR0jBBgwFoAU7/2mydQjbKVSmlrcHh23jgDb
+XLYwDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEADyokkd7f5gKv
+5zbPq/Edhs3lRfI+s62+I3BQ2kgeXOJehRMev0gMqCjM64/xnUPx35zPC+tqRdnD
+p2/axP/2uG+WrVHfd+6GC91ql1wZ4a5QvpPflKAQGXXib4dUsLIr0h9e773qU342
+dLgmR2T7+hENr+CRzvGKEwkAMzNjOE0c8+qTDeTNOzqAiZDbyFOLDi1FcZogQF9Z
+VFmtbcEfNxt36QKEfRiFNWFPgm+QgavuNRcMX/pvIW5HbyzNmKsjbdmG3BkjT2gY
+tboXolaYyOkf3eJmGqsLBsfQCGj3/3kwMigLeJ6RQOyxeNTT1ttW+DZD5d09TRcl
+C7yx+1FQvg==
+-----END CERTIFICATE-----
+`;

@@ -1,17 +1,25 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { Fragment, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { Cabecalho, Vazio } from "@/components/Cabecalho";
 import { cancelarPedido } from "./acoes";
-import { reais, dataHora, numeroPedido, telefone } from "@/lib/formato";
+import {
+  dataHora,
+  nomePagamento,
+  numeroPedido,
+  reais,
+  rotuloPedido,
+  telefone,
+} from "@/lib/formato";
 import type { Pedido, StatusPedido } from "@/lib/tipos";
 
 const COR: Record<StatusPedido, string> = {
+  AGUARDANDO: "bg-ouro/20 text-ouro",
   PENDENTE: "bg-madeira text-creme-suave",
   "EM PREPARO": "bg-preparo/20 text-preparo",
   PRONTO: "bg-pronto/20 text-pronto",
-  "SAIU PARA ENTREGA": "bg-ouro/20 text-ouro",
+  "SAIU PARA ENTREGA": "bg-pronto/20 text-pronto",
   CONCLUIDO: "bg-pronto/15 text-pronto",
   CANCELADO: "bg-cancelado/20 text-cancelado",
 };
@@ -33,20 +41,22 @@ export function ListaPedidos({ pedidos }: { pedidos: Pedido[] }) {
       if (filtro === "Concluídos" && p.status !== "CONCLUIDO") return false;
       if (filtro === "Cancelados" && p.status !== "CANCELADO") return false;
       if (!t) return true;
+      const digitos = t.replace(/\D/g, "");
       return (
         p.cliente_nome.toLowerCase().includes(t) ||
+        rotuloPedido(p).toLowerCase().includes(t) ||
         String(p.numero_dia ?? "").includes(t) ||
-        (p.cliente_telefone ?? "").includes(t.replace(/\D/g, ""))
+        (digitos.length > 0 && (p.cliente_telefone ?? "").includes(digitos))
       );
     });
   }, [pedidos, filtro, busca]);
 
   const faturado = lista
-    .filter((p) => p.status !== "CANCELADO")
+    .filter((p) => p.status !== "CANCELADO" && p.status !== "AGUARDANDO")
     .reduce((s, p) => s + Number(p.total), 0);
 
   function cancelar(p: Pedido) {
-    if (!confirm(`Cancelar o pedido ${numeroPedido(p.numero_dia)} de ${p.cliente_nome}?`))
+    if (!confirm(`Cancelar o pedido ${numeroPedido(p.numero_dia)} (${rotuloPedido(p)})?`))
       return;
     setErro(null);
     iniciar(async () => {
@@ -64,7 +74,7 @@ export function ListaPedidos({ pedidos }: { pedidos: Pedido[] }) {
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {FILTROS.map((f) => (
             <button
               key={f}
@@ -85,7 +95,7 @@ export function ListaPedidos({ pedidos }: { pedidos: Pedido[] }) {
           className="campo max-w-xs"
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
-          placeholder="Número, cliente ou telefone…"
+          placeholder="Número, mesa, cliente ou telefone…"
           aria-label="Buscar pedido"
         />
         <p className="ml-auto text-sm text-creme-suave">
@@ -111,12 +121,12 @@ export function ListaPedidos({ pedidos }: { pedidos: Pedido[] }) {
         />
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-borda">
-          <table className="w-full min-w-[42rem] text-sm">
+          <table className="w-full min-w-[46rem] text-sm">
             <thead className="bg-carvao text-left text-xs uppercase tracking-wide text-creme-suave">
               <tr>
                 <th className="px-4 py-3 font-semibold">#</th>
+                <th className="px-4 py-3 font-semibold">Onde</th>
                 <th className="px-4 py-3 font-semibold">Cliente</th>
-                <th className="px-4 py-3 font-semibold">Tipo</th>
                 <th className="px-4 py-3 font-semibold">Pagamento</th>
                 <th className="px-4 py-3 font-semibold">Quando</th>
                 <th className="px-4 py-3 text-right font-semibold">Total</th>
@@ -126,17 +136,32 @@ export function ListaPedidos({ pedidos }: { pedidos: Pedido[] }) {
             </thead>
             <tbody>
               {lista.map((p) => (
-                <>
+                <Fragment key={p.id}>
                   <tr
-                    key={p.id}
                     onClick={() => setAberto(aberto === p.id ? null : p.id)}
                     className="cursor-pointer border-t border-borda/60 hover:bg-carvao/60"
                   >
-                    <td className="tabular px-4 py-3 font-display text-lg text-ouro">
+                    <td className="tabular px-4 py-3 font-display text-lg font-bold text-ouro">
                       {numeroPedido(p.numero_dia)}
                     </td>
+                    <td className="px-4 py-3 font-medium text-creme">
+                      {p.tipo === "MESA" && p.mesa_id ? (
+                        <Link
+                          href={`/mesas/${p.mesa_id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="underline-offset-2 hover:text-ouro hover:underline"
+                        >
+                          {rotuloPedido(p)}
+                        </Link>
+                      ) : (
+                        rotuloPedido(p)
+                      )}
+                      {p.origem === "CLIENTE" && (
+                        <span className="block text-xs font-normal text-creme-fraco">pelo QR</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
-                      <span className="font-medium text-creme">{p.cliente_nome}</span>
+                      <span className="text-creme-suave">{p.cliente_nome}</span>
                       {p.cliente_telefone && (
                         <span className="block text-xs text-creme-fraco">
                           {telefone(p.cliente_telefone)}
@@ -144,10 +169,11 @@ export function ListaPedidos({ pedidos }: { pedidos: Pedido[] }) {
                       )}
                     </td>
                     <td className="px-4 py-3 text-creme-suave">
-                      {p.tipo_entrega === "ENTREGA" ? "Entrega" : "Retirada"}
-                    </td>
-                    <td className="px-4 py-3 text-creme-suave">
-                      {p.forma_pagamento ?? "—"}
+                      {p.tipo === "MESA"
+                        ? "Na conta da mesa"
+                        : p.forma_pagamento
+                          ? nomePagamento(p.forma_pagamento)
+                          : "—"}
                     </td>
                     <td className="px-4 py-3 text-creme-suave">{dataHora(p.criado_em)}</td>
                     <td className="tabular px-4 py-3 text-right font-medium text-creme">
@@ -181,9 +207,9 @@ export function ListaPedidos({ pedidos }: { pedidos: Pedido[] }) {
                   </tr>
 
                   {aberto === p.id && (
-                    <tr key={`${p.id}-detalhe`} className="border-t border-borda/60 bg-breu">
+                    <tr className="border-t border-borda/60 bg-breu">
                       <td colSpan={8} className="px-6 py-4">
-                        {p.tipo_entrega === "ENTREGA" && p.endereco_entrega && (
+                        {p.tipo === "ENTREGA" && p.endereco_entrega && (
                           <p className="mb-3 text-sm text-creme-suave">
                             <span className="text-creme-fraco">Entregar em: </span>
                             {p.endereco_entrega}
@@ -213,6 +239,9 @@ export function ListaPedidos({ pedidos }: { pedidos: Pedido[] }) {
                             </li>
                           ))}
                         </ul>
+                        {p.motivo_recusa && (
+                          <p className="mt-3 text-sm text-cancelado">Motivo: {p.motivo_recusa}</p>
+                        )}
                         {Number(p.taxa_entrega) > 0 && (
                           <p className="mt-3 text-sm text-creme-suave">
                             Taxa de entrega: {reais(Number(p.taxa_entrega))}
@@ -227,7 +256,7 @@ export function ListaPedidos({ pedidos }: { pedidos: Pedido[] }) {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               ))}
             </tbody>
           </table>

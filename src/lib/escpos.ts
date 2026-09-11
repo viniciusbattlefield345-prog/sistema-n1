@@ -1,15 +1,15 @@
 /**
- * Gerador de ESC/POS para impressora térmica (Tanca TP-650 e compatíveis).
+ * Gerador de ESC/POS para impressora térmica (Tanca, Elgin, Bematech e compatíveis).
  *
- * Por que texto e não imagem: o sistema antigo mandava um PNG feito com
- * html2canvas. Sai borrado, demora, e não aciona guilhotina nem gaveta.
- * Em ESC/POS o cupom sai instantâneo, nítido, e a impressora corta sozinha.
+ * Por que texto e não imagem: imagem feita com html2canvas sai borrada,
+ * demora, e não aciona guilhotina nem gaveta. Em ESC/POS o cupom sai
+ * instantâneo, nítido, e a impressora corta sozinha.
  */
 
 const ESC = 0x1b;
 const GS = 0x1d;
 
-/** CP850 — a página de código que a TP-650 usa pra acento em português. */
+/** CP850 — a página de código que essas impressoras usam pra acento em português. */
 const CP850: Record<string, number> = {
   "Ç": 0x80, "ü": 0x81, "é": 0x82, "â": 0x83, "ä": 0x84, "à": 0x85,
   "ç": 0x87, "ê": 0x88, "ë": 0x89, "è": 0x8a, "ï": 0x8b, "î": 0x8c,
@@ -22,11 +22,23 @@ const CP850: Record<string, number> = {
   "°": 0xf8, "·": 0xfa,
 };
 
+/**
+ * Pontuação "de editor de texto" que não existe na impressora. O endereço
+ * montado no PDV leva " — " antes do bairro: sem esta troca, o travessão
+ * virava um byte inválido e derrubava a impressão do cupom inteiro.
+ */
+const PARECIDOS: Record<string, string> = {
+  "—": "-", "–": "-", "‒": "-", "“": '"', "”": '"', "„": '"', "‘": "'", "’": "'",
+  "…": ".", "•": "*", "×": "x", "✓": "v", " ": " ",
+};
+
 function byteDoChar(c: string): number {
   const codigo = c.charCodeAt(0);
   if (codigo < 128) return codigo;
   const mapeado = CP850[c];
   if (mapeado !== undefined) return mapeado;
+  const parecido = PARECIDOS[c];
+  if (parecido !== undefined) return parecido.charCodeAt(0);
   // Fallback: tira o acento. Melhor sair "ACAI" do que um caractere solto.
   const semAcento = [...c.normalize("NFD")]
     .filter((ch) => {
@@ -34,15 +46,26 @@ function byteDoChar(c: string): number {
       return n < 0x300 || n > 0x36f; // descarta as marcas de acento
     })
     .join("");
-  return semAcento.length === 1 ? semAcento.charCodeAt(0) : 0x3f; // '?'
+  // Só vale se sobrou ASCII puro: emoji ou símbolo estranho vira '?',
+  // nunca um valor acima de 255 (que quebra o base64).
+  return semAcento.length === 1 && semAcento.charCodeAt(0) < 128
+    ? semAcento.charCodeAt(0)
+    : 0x3f; // '?'
 }
 
 export class Cupom {
   private bytes: number[] = [];
+  /** Letra dobrada ocupa o dobro da largura: cabe metade das colunas. */
+  private escala: 1 | 2 | 3 = 1;
 
   constructor(private colunas = 48) {
     this.cru(ESC, 0x40); // inicializa
     this.cru(ESC, 0x74, 0x02); // página de código CP850
+  }
+
+  /** Colunas que cabem numa linha com o tamanho de letra atual. */
+  private get largura() {
+    return Math.floor(this.colunas / this.escala);
   }
 
   private cru(...b: number[]) {
@@ -66,6 +89,7 @@ export class Cupom {
 
   /** 1 = normal, 2 = dobro, 3 = triplo (largura e altura juntas) */
   tamanho(n: 1 | 2 | 3) {
+    this.escala = n;
     const v = (n - 1) * 0x11;
     return this.cru(GS, 0x21, v);
   }
@@ -81,23 +105,27 @@ export class Cupom {
   }
 
   separador(caractere = "-") {
-    return this.linha(caractere.repeat(this.colunas));
+    return this.linha(caractere.repeat(this.largura));
   }
 
-  /** Rótulo à esquerda, valor à direita, pontilhado no meio se sobrar espaço. */
+  /** Rótulo à esquerda, valor à direita. */
   doisLados(esquerda: string, direita: string) {
-    const espaco = this.colunas - esquerda.length - direita.length;
-    if (espaco < 1) return this.linha(esquerda).linha(" ".repeat(Math.max(0, this.colunas - direita.length)) + direita);
+    const espaco = this.largura - esquerda.length - direita.length;
+    if (espaco < 1) {
+      return this.linha(esquerda).linha(
+        " ".repeat(Math.max(0, this.largura - direita.length)) + direita,
+      );
+    }
     return this.linha(esquerda + " ".repeat(espaco) + direita);
   }
 
   /**
-   * Linha de item: "2x Feijoada completa            48,00"
+   * Linha de item: "2x X Bacon                      50,00"
    * Quebra o nome em várias linhas quando não cabe, mantendo o valor na primeira.
    */
   item(quantidade: number, descricao: string, valor: string) {
     const prefixo = `${quantidade}x `;
-    const largura = this.colunas - prefixo.length - valor.length - 1;
+    const largura = this.largura - prefixo.length - valor.length - 1;
     const palavras = descricao.split(" ");
     const linhas: string[] = [];
     let atual = "";
@@ -114,7 +142,7 @@ export class Cupom {
     if (linhas.length === 0) linhas.push("");
 
     const primeira = linhas[0];
-    const preenchimento = this.colunas - prefixo.length - primeira.length - valor.length;
+    const preenchimento = this.largura - prefixo.length - primeira.length - valor.length;
     this.linha(prefixo + primeira + " ".repeat(Math.max(1, preenchimento)) + valor);
     for (const resto of linhas.slice(1)) {
       this.linha(" ".repeat(prefixo.length) + resto);
@@ -124,7 +152,7 @@ export class Cupom {
 
   /** Texto recuado, pra observação e adicional. */
   detalhe(texto: string, recuo = 3) {
-    const largura = this.colunas - recuo;
+    const largura = this.largura - recuo;
     for (let i = 0; i < texto.length; i += largura) {
       this.linha(" ".repeat(recuo) + texto.slice(i, i + largura));
     }

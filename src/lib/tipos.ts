@@ -1,6 +1,7 @@
 export type Papel = "dono" | "atendente" | "cozinha";
 
 export type StatusPedido =
+  | "AGUARDANDO" // cliente pediu pelo QR; o atendente ainda não aprovou
   | "PENDENTE"
   | "EM PREPARO"
   | "PRONTO"
@@ -14,7 +15,11 @@ export type FormaPagamento =
   | "Cartao Credito"
   | "Cartao Debito";
 
-export type TipoEntrega = "ENTREGA" | "RETIRADA";
+/** MESA vai pra conta aberta da mesa; ENTREGA e RETIRADA pagam no pedido. */
+export type TipoPedido = "MESA" | "ENTREGA" | "RETIRADA";
+
+/** EQUIPE = lançado no sistema; CLIENTE = feito pelo QR da mesa. */
+export type OrigemPedido = "EQUIPE" | "CLIENTE";
 
 export interface Perfil {
   id: string;
@@ -26,6 +31,8 @@ export interface Perfil {
 export interface Categoria {
   id: number;
   nome: string;
+  /** Aparece ao lado do nome no cardápio: "de 8 fatias". */
+  descricao: string | null;
   ordem: number;
   ativo: boolean;
 }
@@ -43,7 +50,7 @@ export interface Adicional {
   nome: string;
   preco: number;
   ativo: boolean;
-  /** Secao na tela: "Acompanhamentos", "Carnes", "Saladas e fritos". */
+  /** Seção na tela. Sem seção, tudo cai num bloco chamado "Adicionais". */
   grupo: string | null;
   ordem: number;
 }
@@ -53,8 +60,9 @@ export interface Produto {
   categoria_id: number | null;
   nome: string;
   descricao: string | null;
+  foto_url: string | null;
   preco_base: number;
-  custo: number | null;
+  custo?: number | null;
   ativo: boolean;
   disponivel: boolean;
   ordem: number;
@@ -91,6 +99,41 @@ export interface Caixa {
   status: "ABERTO" | "FECHADO";
 }
 
+export interface Mesa {
+  id: number;
+  numero: number;
+  /** Vai no link do QR code. Trocar o código invalida o QR impresso. */
+  codigo: string;
+  ativo: boolean;
+}
+
+export type StatusComanda = "ABERTA" | "FECHADA" | "CANCELADA";
+
+export interface Pagamento {
+  id: number;
+  comanda_id: number;
+  caixa_id: number | null;
+  forma: FormaPagamento;
+  valor: number;
+  criado_em: string;
+}
+
+/** A conta de uma mesa. `total` é calculado no banco: só pedidos aprovados. */
+export interface Comanda {
+  id: number;
+  mesa_id: number;
+  caixa_id: number | null;
+  status: StatusComanda;
+  total: number;
+  desconto: number;
+  aberta_em: string;
+  fechada_em: string | null;
+  fechada_por: string | null;
+  mesas?: { numero: number } | null;
+  pedidos?: Pedido[];
+  pagamentos?: Pagamento[];
+}
+
 export interface ItemAdicional {
   id: number;
   item_id: number;
@@ -118,10 +161,13 @@ export interface Pedido {
   numero_dia: number | null;
   caixa_id: number | null;
   usuario_id: string | null;
+  origem: OrigemPedido;
+  tipo: TipoPedido;
+  mesa_id: number | null;
+  comanda_id: number | null;
   cliente_id: number | null;
   cliente_nome: string;
   cliente_telefone: string | null;
-  tipo_entrega: TipoEntrega;
   endereco_entrega: string | null;
   taxa_entrega: number;
   subtotal: number;
@@ -130,10 +176,29 @@ export interface Pedido {
   forma_pagamento: FormaPagamento | null;
   troco_para: number | null;
   status: StatusPedido;
+  motivo_recusa: string | null;
+  aprovado_por: string | null;
+  aprovado_em: string | null;
   observacao: string | null;
   criado_em: string;
   atualizado_em: string;
+  mesas?: { numero: number } | null;
   itens_pedido?: ItemPedido[];
+}
+
+export type StatusImpressao = "PENDENTE" | "IMPRIMINDO" | "IMPRESSO" | "ERRO";
+
+/** Um cupom esperando a impressora do balcão. */
+export interface TrabalhoImpressao {
+  id: number;
+  tipo: "PEDIDO" | "CONTA";
+  pedido_id: number | null;
+  comanda_id: number | null;
+  status: StatusImpressao;
+  erro: string | null;
+  tentativas: number;
+  criado_em: string;
+  atualizado_em: string;
 }
 
 /** Item ainda no carrinho, antes de virar pedido no banco. */
@@ -159,12 +224,11 @@ export interface ConfigRestaurante {
   horario: string;
 }
 
+/** Uma impressora só, no PC do balcão, recebe todos os cupons. */
 export interface ConfigImpressoras {
-  cozinha: string;
-  entrega: string;
+  impressora: string;
   colunas: number;
   cortar: boolean;
   abrir_gaveta: boolean;
-  vias_cozinha: number;
-  vias_entrega: number;
+  vias: number;
 }

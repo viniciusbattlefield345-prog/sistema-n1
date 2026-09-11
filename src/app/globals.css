@@ -1,36 +1,41 @@
 @import "tailwindcss";
 
 /* =====================================================================
-   N1 Restaurante e Choperia
-   Preto quente + ouro da coroa. O ambar do chopp aparece em um lugar so.
+   General Burguer
+   Preto do cardápio + o laranja das faixas e dos preços.
+
+   Os nomes dos tokens vêm do sistema anterior (N°1): "ouro" é a cor de
+   destaque — aqui, o laranja — e "creme" é o texto claro. Renomear em
+   centenas de classes não mudaria nada na tela.
    ===================================================================== */
 
 @theme {
-  /* --- superficies: preto puxado pro marrom, nao cinza neutro --- */
-  --color-breu: #0f0d0a;
-  --color-carvao: #17140f;
-  --color-madeira: #221c14;
-  --color-borda: #332a1e;
-  --color-borda-forte: #4a3c28;
+  /* --- superfícies: preto do cardápio --- */
+  --color-breu: #0b0b0b;
+  --color-carvao: #151515;
+  --color-madeira: #1f1f1f;
+  --color-borda: #2c2c2c;
+  --color-borda-forte: #404040;
 
-  /* --- ouro da coroa --- */
-  --color-ouro: #e3ae3c;
-  --color-ouro-claro: #f7d47f;
-  --color-ouro-escuro: #a97c23;
+  /* --- laranja do cardápio --- */
+  --color-ouro: #f5a100;
+  --color-ouro-claro: #ffc445;
+  --color-ouro-escuro: #c47f00;
 
-  /* --- espuma e texto --- */
-  --color-creme: #f5edda;
-  --color-creme-suave: #b9ad96;
-  --color-creme-fraco: #7a7060;
+  /* --- texto --- */
+  --color-creme: #f6f5f2;
+  --color-creme-suave: #b7b5ae;
+  --color-creme-fraco: #7c7a74;
 
-  /* --- estados --- */
-  --color-preparo: #e08a2c;
-  --color-pronto: #4e9a5f;
-  --color-cancelado: #c0392b;
+  /* --- estados (azul no preparo pra não se confundir com a marca) --- */
+  --color-preparo: #5aa9e6;
+  --color-pronto: #4caf6a;
+  --color-cancelado: #e0524a;
 
-  --font-display: var(--fonte-display), "Arial Narrow", sans-serif;
+  --font-display: var(--fonte-display), "Arial Black", sans-serif;
   --font-sans: var(--fonte-corpo), system-ui, sans-serif;
   --font-mono: var(--fonte-mono), "Courier New", monospace;
+  --font-script: var(--fonte-script), cursive;
 
   --radius-cupom: 2px;
 }
@@ -79,47 +84,24 @@
 
 @layer components {
   /* ---------------------------------------------------------------
-     FITA — a faixa da logo ("ESTACAO DO CHOPP") vira o cabecalho
-     de secao do sistema. Pontas chanfradas, como no desenho.
+     FITA — o "★ PIZZAS" do cardápio impresso vira o rótulo de seção
+     do sistema: estrela laranja e letra espaçada.
      --------------------------------------------------------------- */
   .fita {
     display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.3rem 1.1rem;
-    background: linear-gradient(
-      180deg,
-      var(--color-ouro-claro) 0%,
-      var(--color-ouro) 45%,
-      var(--color-ouro-escuro) 100%
-    );
-    color: #241a08;
+    gap: 0.45rem;
+    color: var(--color-ouro);
     font-family: var(--font-display);
-    font-weight: 600;
-    font-size: 0.8rem;
-    letter-spacing: 0.14em;
+    font-weight: 700;
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
-    clip-path: polygon(
-      0 0,
-      100% 0,
-      calc(100% - 10px) 50%,
-      100% 100%,
-      0 100%,
-      10px 50%
-    );
   }
-
-  /* ouro que se comporta como metal: claro em cima, escuro embaixo */
-  .metal {
-    background: linear-gradient(
-      180deg,
-      var(--color-ouro-claro) 0%,
-      var(--color-ouro) 50%,
-      var(--color-ouro-escuro) 100%
-    );
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+  .fita::before {
+    content: "★";
+    font-size: 0.95rem;
+    letter-spacing: 0;
   }
 
   .btn {
@@ -128,7 +110,7 @@
     justify-content: center;
     gap: 0.5rem;
     padding: 0.75rem 1.25rem;
-    border-radius: 8px;
+    border-radius: 10px;
     font-weight: 600;
     font-size: 0.95rem;
     line-height: 1;
@@ -140,15 +122,15 @@
     cursor: not-allowed;
   }
 
-  /* o unico degrade de chopp do sistema fica na acao principal */
+  /* a ação principal de cada tela: laranja chapado, letra preta */
   .btn-ouro {
-    background: linear-gradient(180deg, #f0a03c 0%, #e3ae3c 55%, #b8862a 100%);
-    color: #241a08;
+    background: var(--color-ouro);
+    color: #140d00;
     border: 1px solid var(--color-ouro-escuro);
     font-weight: 700;
   }
   .btn-ouro:hover:not(:disabled) {
-    background: linear-gradient(180deg, #ffd98a 0%, #f0bc55 55%, #cf9a32 100%);
+    background: var(--color-ouro-claro);
   }
 
   .btn-quieto {
@@ -158,17 +140,26 @@
   }
   .btn-quieto:hover:not(:disabled) {
     border-color: var(--color-borda-forte);
-    background: #2b2318;
+    background: #262626;
+  }
+
+  .btn-perigo {
+    background: transparent;
+    color: var(--color-cancelado);
+    border: 1px solid color-mix(in srgb, var(--color-cancelado) 45%, transparent);
+  }
+  .btn-perigo:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-cancelado) 12%, transparent);
   }
 
   .campo {
     width: 100%;
     background: var(--color-breu);
     border: 1px solid var(--color-borda);
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 0.7rem 0.85rem;
     color: var(--color-creme);
-    font-size: 0.95rem;
+    font-size: 1rem; /* 16px: abaixo disso o iPhone dá zoom ao tocar no campo */
     transition: border-color 120ms ease;
   }
   .campo::placeholder {
@@ -190,7 +181,7 @@
   }
 
   /* ---------------------------------------------------------------
-     CUPOM — a comanda na tela e o papel que sai na Tanca.
+     CUPOM — a comanda na tela e o papel que sai na impressora.
      Mesmo tipo, mesmas linhas tracejadas, mesma coluna de dinheiro.
      --------------------------------------------------------------- */
   .cupom {
@@ -215,6 +206,12 @@
 @page {
   size: 80mm auto;
   margin: 3mm;
+}
+
+/* A folha de QR codes das mesas sai em A4, não no rolinho de 80mm. */
+@page folha-a4 {
+  size: A4;
+  margin: 10mm;
 }
 
 @media print {
@@ -268,6 +265,13 @@
   .folha .cupom-linha-forte {
     border-bottom: 2px solid #000 !important;
   }
+
+  .folha-qr {
+    page: folha-a4;
+  }
+  .folha-qr .cartao-qr {
+    break-inside: avoid;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -276,5 +280,6 @@
   *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

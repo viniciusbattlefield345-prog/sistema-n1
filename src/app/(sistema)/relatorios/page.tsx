@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { Cabecalho, Vazio } from "@/components/Cabecalho";
-import { reais } from "@/lib/formato";
+import { nomePagamento, reais } from "@/lib/formato";
 import type { FormaPagamento } from "@/lib/tipos";
 
 export const revalidate = 0;
@@ -18,6 +18,9 @@ function inicioDoDia(diasAtras = 0) {
   return new Date(agora.getTime() - desvio).toISOString();
 }
 
+// Pedido esperando aprovação ou cancelado não é venda.
+const FORA_DA_CONTA = '("CANCELADO","AGUARDANDO")';
+
 export default async function PaginaRelatorios() {
   const supabase = await criarClienteServidor();
   const {
@@ -30,38 +33,47 @@ export default async function PaginaRelatorios() {
     .eq("id", user!.id)
     .single();
 
-  if (perfil?.papel !== "dono") redirect("/pdv");
+  if (perfil?.papel !== "dono") redirect("/mesas");
 
-  const [{ data: hoje }, { data: mes }, { data: top }] = await Promise.all([
+  const [{ data: hoje }, { data: mes }, { data: top }, { data: pagosHoje }] = await Promise.all([
     supabase
       .from("pedidos")
-      .select("total, forma_pagamento, tipo_entrega")
+      .select("total, forma_pagamento, tipo, origem")
       .gte("criado_em", inicioDoDia())
-      .neq("status", "CANCELADO"),
+      .not("status", "in", FORA_DA_CONTA),
     supabase
       .from("pedidos")
       .select("total, criado_em")
       .gte("criado_em", inicioDoDia(29))
-      .neq("status", "CANCELADO"),
+      .not("status", "in", FORA_DA_CONTA),
     supabase
       .from("vw_vendas_produto")
       .select("produto, quantidade, faturamento")
       .gte("dia", inicioDoDia(29)),
+    supabase.from("pagamentos").select("valor, forma").gte("criado_em", inicioDoDia()),
   ]);
 
   const pedidosHoje = hoje ?? [];
   const totalHoje = pedidosHoje.reduce((s, p) => s + Number(p.total), 0);
   const ticket = pedidosHoje.length ? totalHoje / pedidosHoje.length : 0;
-
   const totalMes = (mes ?? []).reduce((s, p) => s + Number(p.total), 0);
 
+  const doQr = pedidosHoje.filter((p) => p.origem === "CLIENTE").length;
+  const deMesa = pedidosHoje.filter((p) => p.tipo === "MESA").length;
+
+  // Entrega e retirada pagam no pedido; mesa paga no fechamento da conta.
   const porPagamento = new Map<string, number>();
   for (const p of pedidosHoje) {
-    const f = (p.forma_pagamento as FormaPagamento) ?? "—";
-    porPagamento.set(f, (porPagamento.get(f) ?? 0) + Number(p.total));
+    if (p.tipo === "MESA" || !p.forma_pagamento) continue;
+    const nome = nomePagamento(p.forma_pagamento as FormaPagamento);
+    porPagamento.set(nome, (porPagamento.get(nome) ?? 0) + Number(p.total));
   }
-
-  const entregas = pedidosHoje.filter((p) => p.tipo_entrega === "ENTREGA").length;
+  for (const pg of pagosHoje ?? []) {
+    const nome = nomePagamento(pg.forma as FormaPagamento);
+    porPagamento.set(nome, (porPagamento.get(nome) ?? 0) + Number(pg.valor));
+  }
+  const recebido = [...porPagamento.values()].reduce((s, v) => s + v, 0);
+  const aReceber = Math.max(totalHoje - recebido, 0);
 
   // A view já agrupa por dia; aqui somamos os 30 dias por produto.
   const somaProduto = new Map<string, { qtd: number; valor: number }>();
@@ -75,59 +87,54 @@ export default async function PaginaRelatorios() {
     .sort((a, b) => b[1].qtd - a[1].qtd)
     .slice(0, 10);
 
+  const base = Math.max(recebido + aReceber, 1);
+
   return (
     <div className="p-4 lg:p-8">
       <Cabecalho
         fita="Gerência"
         titulo="Relatórios"
-        descricao="Hoje e os últimos 30 dias. Pedido cancelado não entra em nenhuma conta."
+        descricao="Hoje e os últimos 30 dias. Pedido cancelado ou recusado não entra em nenhuma conta."
       />
 
       <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Cartao rotulo="Vendas de hoje" valor={reais(totalHoje)} nota={`${pedidosHoje.length} pedidos`} destaque />
         <Cartao rotulo="Ticket médio" valor={reais(ticket)} nota="hoje" />
-        <Cartao rotulo="Entregas hoje" valor={String(entregas)} nota={`de ${pedidosHoje.length} pedidos`} />
+        <Cartao
+          rotulo="Pedidos de mesa hoje"
+          valor={String(deMesa)}
+          nota={`${doQr} feitos pelo QR`}
+        />
         <Cartao rotulo="Últimos 30 dias" valor={reais(totalMes)} nota={`${(mes ?? []).length} pedidos`} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="rounded-2xl border border-borda bg-carvao p-6">
-          <h2 className="mb-4 font-display text-lg uppercase tracking-wide text-creme">
+          <h2 className="mb-4 font-display text-lg font-bold uppercase tracking-wide text-creme">
             Como pagaram hoje
           </h2>
-          {porPagamento.size === 0 ? (
+          {porPagamento.size === 0 && aReceber === 0 ? (
             <p className="text-sm text-creme-fraco">Nenhuma venda hoje ainda.</p>
           ) : (
             <ul className="space-y-3">
               {[...porPagamento.entries()]
                 .sort((a, b) => b[1] - a[1])
                 .map(([forma, valor]) => (
-                  <li key={forma}>
-                    <div className="mb-1 flex justify-between text-sm">
-                      <span className="text-creme-suave">{forma}</span>
-                      <span className="tabular font-medium text-creme">
-                        {reais(valor)}
-                      </span>
-                    </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-breu">
-                      <div
-                        className="h-full rounded-full bg-ouro"
-                        style={{ width: `${totalHoje ? (valor / totalHoje) * 100 : 0}%` }}
-                      />
-                    </div>
-                  </li>
+                  <Barra key={forma} rotulo={forma} valor={valor} base={base} />
                 ))}
+              {aReceber > 0.009 && (
+                <Barra rotulo="Ainda na conta das mesas" valor={aReceber} base={base} apagada />
+              )}
             </ul>
           )}
         </section>
 
         <section className="rounded-2xl border border-borda bg-carvao p-6">
-          <h2 className="mb-1 font-display text-lg uppercase tracking-wide text-creme">
+          <h2 className="mb-1 font-display text-lg font-bold uppercase tracking-wide text-creme">
             Mais vendidos
           </h2>
           <p className="mb-4 text-xs text-creme-fraco">
-            Últimos 30 dias, contado por produto — não por texto, então observação
-            diferente não vira produto diferente.
+            Últimos 30 dias, contado por produto — observação diferente não vira produto diferente.
           </p>
           {ranking.length === 0 ? (
             <Vazio titulo="Sem vendas ainda" texto="O ranking aparece depois do primeiro pedido." />
@@ -153,6 +160,33 @@ export default async function PaginaRelatorios() {
   );
 }
 
+function Barra({
+  rotulo,
+  valor,
+  base,
+  apagada,
+}: {
+  rotulo: string;
+  valor: number;
+  base: number;
+  apagada?: boolean;
+}) {
+  return (
+    <li>
+      <div className="mb-1 flex justify-between text-sm">
+        <span className="text-creme-suave">{rotulo}</span>
+        <span className="tabular font-medium text-creme">{reais(valor)}</span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-breu">
+        <div
+          className={"h-full rounded-full " + (apagada ? "bg-borda-forte" : "bg-ouro")}
+          style={{ width: `${(valor / base) * 100}%` }}
+        />
+      </div>
+    </li>
+  );
+}
+
 function Cartao({
   rotulo,
   valor,
@@ -174,7 +208,7 @@ function Cartao({
       <p className="text-xs uppercase tracking-wide text-creme-fraco">{rotulo}</p>
       <p
         className={
-          "tabular mt-1 font-display text-2xl " +
+          "tabular mt-1 font-display text-2xl font-bold " +
           (destaque ? "text-ouro" : "text-creme")
         }
       >

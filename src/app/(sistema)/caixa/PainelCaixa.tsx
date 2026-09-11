@@ -18,11 +18,13 @@ export function PainelCaixa({
   aberto,
   resumo,
   quantidade,
+  mesasAbertas,
   historico,
 }: {
   aberto: Caixa | null;
   resumo: ResumoPagamento;
   quantidade: number;
+  mesasAbertas: { quantidade: number; total: number };
   historico: Caixa[];
 }) {
   const [valorAbertura, setValorAbertura] = useState("");
@@ -118,7 +120,7 @@ export function PainelCaixa({
             </div>
 
             <dl className="space-y-2 text-sm">
-              <Linha rotulo={`Vendas do caixa (${quantidade} pedidos)`} valor={vendas} />
+              <Linha rotulo={`Recebido neste caixa (${quantidade} vendas)`} valor={vendas} />
               <Linha rotulo="Abertura (troco inicial)" valor={Number(aberto.valor_abertura)} />
               <div className="flex items-baseline justify-between border-t border-borda pt-3">
                 <dt className="font-display text-lg uppercase tracking-wide text-creme">
@@ -132,6 +134,14 @@ export function PainelCaixa({
                 Só dinheiro entra nessa conta. Pix e cartão não passam pela gaveta.
               </p>
             </dl>
+
+            {mesasAbertas.quantidade > 0 && (
+              <p className="mt-5 rounded-xl border border-ouro/40 bg-ouro/10 px-4 py-3 text-sm text-ouro">
+                {mesasAbertas.quantidade} mesa(s) com conta aberta ·{" "}
+                <strong className="tabular">{reais(mesasAbertas.total)}</strong> ainda a receber.
+                Esse valor entra aqui quando a conta de cada mesa for fechada.
+              </p>
+            )}
           </div>
 
           {/* fechamento */}

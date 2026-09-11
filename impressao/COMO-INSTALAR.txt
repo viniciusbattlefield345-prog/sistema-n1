@@ -1,0 +1,36 @@
+IMPRESSAO AUTOMATICA - GENERAL BURGUER
+Faca isto UMA VEZ, no computador onde a impressora termica esta ligada.
+=======================================================================
+
+1) Instale o QZ Tray
+   https://qz.io/download/  ->  Windows  ->  instale e deixe abrir.
+   Ele fica rodando na bandeja do Windows (perto do relogio).
+
+2) Coloque o certificado do General Burguer no QZ Tray
+   Copie o arquivo  override.crt  (esta nesta mesma pasta) para:
+
+       C:\Program Files\QZ Tray\
+
+   O Windows vai pedir permissao de administrador para colar ali: aceite.
+
+3) Reinicie o QZ Tray
+   Clique com o botao direito no icone do QZ na bandeja -> Exit.
+   Depois abra o QZ Tray de novo pelo menu Iniciar.
+
+4) Abra o sistema neste computador (Chrome)
+   Entre com o seu usuario e va no menu  Impressao.
+   - Escolha a impressora na lista.
+   - Clique em "Imprimir um teste".
+   - Se o QZ mostrar uma janelinha uma ultima vez, marque
+     "Remember this decision" e clique em Allow.
+
+5) Deixe a tela Impressao aberta
+   Pode minimizar o Chrome, so nao feche a aba. Todo pedido aprovado
+   no celular sai sozinho nessa impressora.
+
+Se o QZ continuar perguntando "Allow?" a cada cupom:
+   - confira se o override.crt esta mesmo em C:\Program Files\QZ Tray\
+   - confira se o QZ foi fechado (Exit) e aberto de novo
+   - na tela Impressao, o quadro "Impressao automatica" tem que dizer
+     "Sem perguntar". Se disser "Vai pedir permissao", falta a chave
+     QZ_CHAVE_PRIVADA nas variaveis da Vercel.

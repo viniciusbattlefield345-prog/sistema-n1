@@ -41,7 +41,7 @@ export default async function PaginaAcessos() {
     .eq("id", user!.id)
     .single();
 
-  if (eu?.papel !== "dono") redirect("/pdv");
+  if (eu?.papel !== "dono") redirect("/mesas");
 
   const [{ data: perfis }, emails] = await Promise.all([
     supabase.from("perfis").select("id, nome, papel, ativo").order("nome"),

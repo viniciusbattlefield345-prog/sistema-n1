@@ -1,64 +1,50 @@
-"use client";
-
-import { useEffect, useRef, useState } from "react";
-
 /**
- * Marca do restaurante.
+ * Marca do General Burguer, em texto, enquanto a logo oficial não chega:
+ * o nome em caixa-alta, branco, com a onda laranja por baixo — o mesmo
+ * desenho do "GENERAL BURGUER" do cardápio impresso.
  *
- * A arte tem fundo preto chapado. Em vez de recortar o PNG (o recorte
- * automatico come as areas claras internas — a espuma, o brilho do ouro),
- * usamos mix-blend-mode: lighten. Sobre um fundo escuro, o preto da arte
- * some sozinho e o dourado continua intacto. Zero edicao de arquivo.
- *
- * Se /public/logo.jpg ainda nao existir, cai no brasao em texto — o
- * sistema nunca abre quebrado esperando um arquivo.
+ * `tamanho` é a altura da letra em rem; a onda acompanha.
  */
 export function Marca({
-  tamanho = 84,
-  comFita = true,
+  tamanho = 1.5,
+  alinhamento = "centro",
+  emLinha = false,
 }: {
   tamanho?: number;
-  comFita?: boolean;
+  alinhamento?: "centro" | "esquerda";
+  /** "GENERAL BURGUER" numa linha só — pra barra de topo do celular. */
+  emLinha?: boolean;
 }) {
-  const [temArte, setTemArte] = useState(true);
-  const ref = useRef<HTMLImageElement>(null);
-
-  // A imagem pode falhar antes do React montar o onError (no primeiro paint).
-  // Depois de montar, conferimos o resultado real do carregamento.
-  useEffect(() => {
-    const img = ref.current;
-    if (img?.complete && img.naturalWidth === 0) setTemArte(false);
-  }, []);
-
   return (
-    <div className="flex flex-col items-center gap-2">
-      {temArte ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          ref={ref}
-          src="/logo.jpg"
-          alt="N°1 Restaurante e Choperia"
-          width={tamanho}
-          height={tamanho}
-          className="object-contain mix-blend-lighten"
-          style={{ width: tamanho, height: tamanho }}
-          onError={() => setTemArte(false)}
+    <span
+      role="img"
+      aria-label="General Burguer"
+      className={
+        "inline-flex flex-col leading-[0.92] " +
+        (alinhamento === "centro" ? "items-center text-center" : "items-start text-left")
+      }
+      style={{ fontSize: `${tamanho}rem` }}
+    >
+      <span aria-hidden className="font-display font-extrabold uppercase tracking-[0.01em] text-creme">
+        {emLinha ? (
+          "General Burguer"
+        ) : (
+          <>
+            General
+            <br />
+            Burguer
+          </>
+        )}
+      </span>
+      <svg aria-hidden viewBox="0 0 100 8" className="mt-[0.14em] block h-auto w-full text-ouro">
+        <path
+          d="M1 4.5 Q 5.5 0.5 10 4.5 T 19 4.5 T 28 4.5 T 37 4.5 T 46 4.5 T 55 4.5 T 64 4.5 T 73 4.5 T 82 4.5 T 91 4.5 T 99 4"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.4"
+          strokeLinecap="round"
         />
-      ) : (
-        <div
-          className="border-ouro-escuro bg-breu flex items-center justify-center rounded-full border-2"
-          style={{ width: tamanho, height: tamanho }}
-        >
-          <span
-            className="metal font-display font-bold leading-none"
-            style={{ fontSize: tamanho * 0.42 }}
-          >
-            N°1
-          </span>
-        </div>
-      )}
-
-      {comFita && <span className="fita">Estação do Chopp</span>}
-    </div>
+      </svg>
+    </span>
   );
 }

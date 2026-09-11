@@ -15,8 +15,9 @@ import type {
   Cliente,
   FormaPagamento,
   ItemCarrinho,
+  Mesa,
   Produto,
-  TipoEntrega,
+  TipoPedido,
 } from "@/lib/tipos";
 
 const PAGAMENTOS: FormaPagamento[] = [
@@ -33,6 +34,12 @@ const NOME_PAGAMENTO: Record<FormaPagamento, string> = {
   "Cartao Credito": "Crédito",
 };
 
+const TIPOS: { tipo: TipoPedido; rotulo: string }[] = [
+  { tipo: "MESA", rotulo: "Mesa" },
+  { tipo: "RETIRADA", rotulo: "Retirada" },
+  { tipo: "ENTREGA", rotulo: "Entrega" },
+];
+
 export function PainelPdv({
   caixaId,
   categorias,
@@ -40,6 +47,9 @@ export function PainelPdv({
   adicionais,
   clientes,
   bairros,
+  mesas,
+  ocupadas,
+  mesaInicial,
 }: {
   caixaId: number;
   categorias: Categoria[];
@@ -47,6 +57,9 @@ export function PainelPdv({
   adicionais: Adicional[];
   clientes: Cliente[];
   bairros: Bairro[];
+  mesas: Mesa[];
+  ocupadas: number[];
+  mesaInicial: number | null;
 }) {
   const router = useRouter();
   const [salvando, iniciarSalvamento] = useTransition();
@@ -56,7 +69,8 @@ export function PainelPdv({
   const [itens, setItens] = useState<ItemCarrinho[]>([]);
   const [produtoAberto, setProdutoAberto] = useState<Produto | null>(null);
 
-  const [tipo, setTipo] = useState<TipoEntrega>("ENTREGA");
+  const [tipo, setTipo] = useState<TipoPedido>("MESA");
+  const [mesaId, setMesaId] = useState<number | null>(mesaInicial);
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [nomeAvulso, setNomeAvulso] = useState("");
   const [buscaCliente, setBuscaCliente] = useState("");
@@ -91,6 +105,7 @@ export function PainelPdv({
 
     setItens(r.itens);
     setTipo(r.tipo);
+    setMesaId(r.mesaId ?? null);
     setNomeAvulso(r.nomeAvulso);
     setForma(r.forma);
     setTrocoTexto(r.trocoTexto);
@@ -104,17 +119,25 @@ export function PainelPdv({
     setRestaurado(true);
   }, [clientes]);
 
+  // Veio de "Lançar pedido" numa mesa: a mesa manda, mesmo com rascunho antigo.
+  useEffect(() => {
+    if (mesaInicial === null) return;
+    setTipo("MESA");
+    setMesaId(mesaInicial);
+  }, [mesaInicial]);
+
   useEffect(() => {
     if (!carregado.current) return; // não apagar o rascunho antes de lê-lo
     gravarRascunho({
       itens,
       tipo,
+      mesaId,
       clienteId: cliente?.id ?? null,
       nomeAvulso,
       forma,
       trocoTexto,
     });
-  }, [itens, tipo, cliente, nomeAvulso, forma, trocoTexto]);
+  }, [itens, tipo, mesaId, cliente, nomeAvulso, forma, trocoTexto]);
 
   function limparPedido() {
     setItens([]);
@@ -125,6 +148,10 @@ export function PainelPdv({
     setRestaurado(false);
     limparRascunho();
   }
+
+  const ehMesa = tipo === "MESA";
+  const mesa = mesas.find((m) => m.id === mesaId) ?? null;
+  const ocupada = new Set(ocupadas);
 
   const bairro = bairros.find((b) => b.id === cliente?.bairro_id) ?? null;
   const taxa = tipo === "ENTREGA" ? Number(bairro?.taxa ?? 0) : 0;
@@ -214,10 +241,11 @@ export function PainelPdv({
     iniciarSalvamento(async () => {
       const resultado = await salvarPedido({
         caixa_id: caixaId,
-        tipo_entrega: tipo,
+        tipo,
+        mesa_id: ehMesa ? mesaId : null,
         cliente_id: tipo === "ENTREGA" ? (cliente?.id ?? null) : null,
         cliente_nome: clienteNome,
-        cliente_telefone: cliente?.telefone ?? null,
+        cliente_telefone: tipo === "ENTREGA" ? (cliente?.telefone ?? null) : null,
         endereco_entrega: tipo === "ENTREGA" ? endereco : null,
         bairro_id: cliente?.bairro_id ?? null,
         forma_pagamento: forma,
@@ -242,22 +270,25 @@ export function PainelPdv({
       }
       // Pedido gravado: o rascunho cumpriu o papel e sai de cena.
       limparRascunho();
-      router.push(`/imprimir/${resultado.pedido_id}`);
+      router.push(
+        resultado.mesa_id ? `/mesas/${resultado.mesa_id}` : `/imprimir/${resultado.pedido_id}`,
+      );
     });
   }
 
   const podeFechar =
     itens.length > 0 &&
-    clienteNome.trim().length > 0 &&
-    (tipo === "RETIRADA" || Boolean(cliente));
+    (ehMesa
+      ? mesaId !== null
+      : clienteNome.trim().length > 0 && (tipo === "RETIRADA" || Boolean(cliente)));
 
   return (
     <div className="flex h-[calc(100vh-3.25rem)] lg:h-screen">
       {/* ---------------- CARDÁPIO ---------------- */}
       <section className="flex min-w-0 flex-1 flex-col pb-20 lg:pb-0">
         <header className="border-b border-borda px-6 py-4">
-          <div className="mb-4 flex items-center gap-4">
-            <h1 className="font-display text-2xl uppercase tracking-wide text-creme">
+          <div className="mb-4 flex flex-wrap items-center gap-4">
+            <h1 className="font-display text-2xl font-extrabold uppercase tracking-wide text-creme">
               Novo pedido
             </h1>
             {itens.length > 0 && (
@@ -308,12 +339,12 @@ export function PainelPdv({
           {produtosFiltrados.length === 0 ? (
             <div className="grid h-full place-items-center text-center">
               <div>
-                <p className="font-display text-lg uppercase tracking-wide text-creme-suave">
+                <p className="font-display text-lg font-bold uppercase tracking-wide text-creme-suave">
                   Nada por aqui
                 </p>
                 <p className="mt-1 text-sm text-creme-fraco">
                   {produtos.length === 0
-                    ? "Cadastre os pratos em Cardápio para começar a vender."
+                    ? "Cadastre os produtos em Cardápio para começar a vender."
                     : "Nenhum produto com esse nome nesta categoria."}
                 </p>
               </div>
@@ -345,27 +376,65 @@ export function PainelPdv({
           onClick={() => setVerComanda(false)}
           className="flex items-center justify-between border-b border-borda px-4 py-3 text-sm text-creme-suave lg:hidden"
         >
-          <span className="font-display uppercase tracking-wide">Comanda</span>
+          <span className="font-display font-bold uppercase tracking-wide">Comanda</span>
           <span>fechar</span>
         </button>
-        {/* tipo + cliente */}
-        <div className="border-b border-borda p-4">
-          <div className="mb-3 grid grid-cols-2 gap-2">
-            {(["ENTREGA", "RETIRADA"] as TipoEntrega[]).map((t) => (
+        {/* tipo + mesa/cliente */}
+        <div className="max-h-[45vh] overflow-y-auto border-b border-borda p-4">
+          <div className="mb-3 grid grid-cols-3 gap-2">
+            {TIPOS.map((t) => (
               <button
-                key={t}
+                key={t.tipo}
                 type="button"
-                onClick={() => setTipo(t)}
+                onClick={() => setTipo(t.tipo)}
                 className={
-                  "btn text-sm " + (tipo === t ? "btn-ouro" : "btn-quieto")
+                  "btn px-2 text-sm " + (tipo === t.tipo ? "btn-ouro" : "btn-quieto")
                 }
               >
-                {t === "ENTREGA" ? "Entrega" : "Retirada"}
+                {t.rotulo}
               </button>
             ))}
           </div>
 
-          {tipo === "ENTREGA" ? (
+          {ehMesa ? (
+            <>
+              {mesas.length === 0 ? (
+                <p className="text-sm text-creme-suave">
+                  Nenhuma mesa cadastrada. Cadastre em Mesas e QR codes.
+                </p>
+              ) : (
+                <div className="mb-3 grid grid-cols-6 gap-1.5" role="radiogroup" aria-label="Mesa">
+                  {mesas.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={mesaId === m.id}
+                      onClick={() => setMesaId(m.id)}
+                      title={ocupada.has(m.id) ? "Mesa com conta aberta" : "Mesa livre"}
+                      className={
+                        "relative rounded-lg border py-2 font-display text-sm font-bold transition-colors " +
+                        (mesaId === m.id
+                          ? "border-ouro bg-ouro text-black"
+                          : ocupada.has(m.id)
+                            ? "border-ouro/40 bg-ouro/10 text-ouro"
+                            : "border-borda text-creme-suave hover:border-borda-forte")
+                      }
+                    >
+                      {m.numero}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <input
+                className="campo"
+                value={nomeAvulso}
+                onChange={(e) => setNomeAvulso(e.target.value)}
+                placeholder="Nome do cliente (opcional)"
+                aria-label="Nome do cliente"
+              />
+            </>
+          ) : tipo === "ENTREGA" ? (
             cliente ? (
               <div className="rounded-lg border border-borda bg-breu px-3 py-2.5">
                 <div className="flex items-start justify-between gap-2">
@@ -452,6 +521,7 @@ export function PainelPdv({
         <Comanda
           itens={itens}
           tipo={tipo}
+          mesaNumero={mesa?.numero ?? null}
           clienteNome={clienteNome}
           endereco={endereco}
           taxa={taxa}
@@ -464,41 +534,49 @@ export function PainelPdv({
 
         {/* pagamento + fechar */}
         <div className="border-t border-borda p-4">
-          <span className="rotulo">Pagamento</span>
-          <div className="mb-3 grid grid-cols-4 gap-1.5">
-            {PAGAMENTOS.map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => setForma(p)}
-                className={
-                  "rounded-lg border px-1 py-2 text-xs font-medium transition-colors " +
-                  (forma === p
-                    ? "border-ouro bg-ouro/15 text-ouro"
-                    : "border-borda text-creme-suave hover:border-borda-forte")
-                }
-              >
-                {NOME_PAGAMENTO[p]}
-              </button>
-            ))}
-          </div>
+          {ehMesa ? (
+            <p className="mb-3 text-xs text-creme-fraco">
+              Pedido de mesa entra na conta dela — o pagamento é no fechamento.
+            </p>
+          ) : (
+            <>
+              <span className="rotulo">Pagamento</span>
+              <div className="mb-3 grid grid-cols-4 gap-1.5">
+                {PAGAMENTOS.map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setForma(p)}
+                    className={
+                      "rounded-lg border px-1 py-2 text-xs font-medium transition-colors " +
+                      (forma === p
+                        ? "border-ouro bg-ouro/15 text-ouro"
+                        : "border-borda text-creme-suave hover:border-borda-forte")
+                    }
+                  >
+                    {NOME_PAGAMENTO[p]}
+                  </button>
+                ))}
+              </div>
 
-          {forma === "Dinheiro" && (
-            <div className="mb-3 flex items-center gap-3">
-              <input
-                className="campo"
-                inputMode="decimal"
-                value={trocoTexto}
-                onChange={(e) => setTrocoTexto(e.target.value)}
-                placeholder="Troco para quanto?"
-                aria-label="Troco para"
-              />
-              {troco > 0 && (
-                <span className="shrink-0 text-sm text-creme-suave">
-                  Levar <strong className="text-ouro">{reais(troco)}</strong>
-                </span>
+              {forma === "Dinheiro" && (
+                <div className="mb-3 flex items-center gap-3">
+                  <input
+                    className="campo"
+                    inputMode="decimal"
+                    value={trocoTexto}
+                    onChange={(e) => setTrocoTexto(e.target.value)}
+                    placeholder="Troco para quanto?"
+                    aria-label="Troco para"
+                  />
+                  {troco > 0 && (
+                    <span className="shrink-0 text-sm text-creme-suave">
+                      Levar <strong className="text-ouro">{reais(troco)}</strong>
+                    </span>
+                  )}
+                </div>
               )}
-            </div>
+            </>
           )}
 
           {erro && (
@@ -516,7 +594,13 @@ export function PainelPdv({
             disabled={!podeFechar || salvando}
             onClick={fecharPedido}
           >
-            {salvando ? "Salvando…" : `Fechar pedido · ${reais(total)}`}
+            {salvando
+              ? "Salvando…"
+              : ehMesa
+                ? mesa
+                  ? `Lançar na mesa ${mesa.numero} · ${reais(total)}`
+                  : "Escolha a mesa"
+                : `Fechar pedido · ${reais(total)}`}
           </button>
         </div>
       </aside>
@@ -533,7 +617,7 @@ export function PainelPdv({
             : `${itens.length} ${itens.length === 1 ? "item" : "itens"} na comanda`}
         </span>
         <span className="flex items-center gap-3">
-          <span className="tabular font-display text-xl text-ouro">
+          <span className="tabular font-display text-xl font-bold text-ouro">
             {reais(total)}
           </span>
           <span className="rounded-lg bg-ouro/15 px-3 py-1.5 text-xs font-semibold text-ouro">
@@ -620,9 +704,9 @@ function CartaoProduto({
           </p>
         )}
       </div>
-      <p className="mt-3 font-display text-lg text-ouro tabular">
+      <p className="mt-3 font-display text-lg font-bold text-ouro tabular">
         {variacoes.length > 0 && (
-          <span className="mr-1 text-xs text-creme-fraco">a partir de</span>
+          <span className="mr-1 text-xs font-normal text-creme-fraco">a partir de</span>
         )}
         {reais(menorPreco)}
       </p>

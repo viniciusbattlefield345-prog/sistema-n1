@@ -17,10 +17,14 @@ export function ListaProdutos({
   adicionais: Adicional[];
 }) {
   const [editando, setEditando] = useState<Produto | null | undefined>(undefined);
+  const [categoriaId, setCategoriaId] = useState<number | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [, iniciar] = useTransition();
 
   const nomeCategoria = new Map(categorias.map((c) => [c.id, c.nome]));
+  const visiveis =
+    categoriaId === null ? produtos : produtos.filter((p) => p.categoria_id === categoriaId);
+  const semFoto = produtos.filter((p) => p.ativo && !p.foto_url).length;
 
   function alternar(p: Produto) {
     setErro(null);
@@ -44,12 +48,39 @@ export function ListaProdutos({
       <Cabecalho
         fita="Cardápio"
         titulo="Cardápio"
-        descricao="Acabou um prato no meio do almoço? Use “acabou hoje” — ele some do PDV na hora e volta amanhã com um clique."
+        descricao="Acabou alguma coisa no meio do movimento? Use “acabou hoje” — some do PDV e do cardápio da mesa na hora, e volta com um toque."
       >
         <button className="btn btn-ouro" onClick={() => setEditando(null)}>
           Novo produto
         </button>
       </Cabecalho>
+
+      {semFoto > 0 && (
+        <p className="mb-4 text-xs text-creme-fraco">
+          {semFoto} produto(s) ainda sem foto. Com foto, o cardápio da mesa fica bem mais bonito.
+        </p>
+      )}
+
+      {categorias.length > 0 && (
+        <div className="mb-5 flex flex-wrap gap-2">
+          {[{ id: null, nome: "Tudo" }, ...categorias].map((c) => (
+            <button
+              key={c.id ?? "tudo"}
+              type="button"
+              onClick={() => setCategoriaId(c.id)}
+              aria-pressed={categoriaId === c.id}
+              className={
+                "rounded-full border px-4 py-1.5 text-sm font-medium transition-colors " +
+                (categoriaId === c.id
+                  ? "border-ouro bg-ouro/15 text-ouro"
+                  : "border-borda text-creme-suave hover:border-borda-forte")
+              }
+            >
+              {c.nome}
+            </button>
+          ))}
+        </div>
+      )}
 
       {erro && (
         <p
@@ -63,7 +94,7 @@ export function ListaProdutos({
       {produtos.length === 0 ? (
         <Vazio
           titulo="Cardápio vazio"
-          texto="Sem produto cadastrado, o PDV não tem o que vender."
+          texto="Sem produto cadastrado, não tem o que vender."
         >
           <button className="btn btn-ouro" onClick={() => setEditando(null)}>
             Cadastrar produto
@@ -71,9 +102,9 @@ export function ListaProdutos({
         </Vazio>
       ) : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {produtos.map((p) => {
+          {visiveis.map((p) => {
             const tamanhos = p.produto_variacoes ?? [];
-            const qtdItens = (p.produto_adicionais ?? []).length;
+            const qtdAdicionais = (p.produto_adicionais ?? []).length;
             return (
               <article
                 key={p.id}
@@ -84,9 +115,18 @@ export function ListaProdutos({
                     : "border-borda/50 opacity-55")
                 }
               >
-                <div className="mb-3 flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h2 className="font-display text-lg uppercase tracking-wide text-creme">
+                <div className="mb-3 flex items-start gap-3">
+                  {p.foto_url && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={p.foto_url}
+                      alt=""
+                      loading="lazy"
+                      className="size-14 shrink-0 rounded-xl object-cover"
+                    />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <h2 className="font-display text-base font-bold uppercase tracking-wide text-creme">
                       {p.nome}
                     </h2>
                     <p className="text-xs text-creme-fraco">
@@ -103,7 +143,7 @@ export function ListaProdutos({
                 </div>
 
                 {p.descricao && (
-                  <p className="mb-3 text-sm leading-snug text-creme-suave">
+                  <p className="mb-3 line-clamp-3 text-sm leading-snug text-creme-suave">
                     {p.descricao}
                   </p>
                 )}
@@ -120,15 +160,15 @@ export function ListaProdutos({
                       </span>
                     ))
                   ) : (
-                    <span className="tabular font-display text-xl text-ouro">
+                    <span className="tabular font-display text-xl font-bold text-ouro">
                       {reais(Number(p.preco_base))}
                     </span>
                   )}
                 </div>
 
-                {qtdItens > 0 && (
+                {qtdAdicionais > 0 && (
                   <p className="mb-4 text-xs text-creme-fraco">
-                    {qtdItens} {qtdItens === 1 ? "item pode ir" : "itens podem ir"} dentro
+                    Aceita {qtdAdicionais} {qtdAdicionais === 1 ? "adicional" : "adicionais"}
                   </p>
                 )}
 

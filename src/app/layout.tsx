@@ -1,11 +1,12 @@
 import type { Metadata, Viewport } from "next";
-import { Oswald, Inter_Tight, JetBrains_Mono } from "next/font/google";
+import { Montserrat, Inter_Tight, JetBrains_Mono, Great_Vibes } from "next/font/google";
 import "./globals.css";
 
-const display = Oswald({
+// Montserrat pesada é a letra dos nomes do cardápio impresso ("CALABRESA").
+const display = Montserrat({
   variable: "--fonte-display",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: ["600", "700", "800"],
 });
 
 const corpo = Inter_Tight({
@@ -19,39 +20,45 @@ const mono = JetBrains_Mono({
   weight: ["400", "500", "700"],
 });
 
+// O "Cardápio" manuscrito do topo do cardápio. Só aparece na tela do cliente.
+const script = Great_Vibes({
+  variable: "--fonte-script",
+  subsets: ["latin"],
+  weight: "400",
+});
+
+// A Vercel informa o endereço de produção no build. Sem metadataBase, a
+// imagem de compartilhamento vira caminho relativo e o WhatsApp não acha.
+const endereco = process.env.VERCEL_PROJECT_PRODUCTION_URL
+  ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+  : "http://localhost:3400";
+
 export const metadata: Metadata = {
-  // Sem metadataBase o Next monta a URL da imagem como caminho relativo,
-  // e o WhatsApp não consegue buscar — cai no ícone padrão.
-  metadataBase: new URL("https://arinete.vercel.app"),
-  title: "N°1 Restaurante e Choperia",
-  description: "Estação do Chopp · Atílio Vivacqua/ES",
+  metadataBase: new URL(endereco),
+  title: {
+    default: "General Burguer",
+    template: "%s · General Burguer",
+  },
+  description: "Hambúrgueres, pizzas e porções. Peça direto da mesa.",
   openGraph: {
     type: "website",
     locale: "pt_BR",
-    siteName: "N°1 Restaurante e Choperia",
-    title: "N°1 Restaurante e Choperia",
-    description: "Estação do Chopp · Atílio Vivacqua/ES",
+    siteName: "General Burguer",
+    title: "General Burguer",
+    description: "Hambúrgueres, pizzas e porções. Peça direto da mesa.",
     url: "/",
-    images: [
-      {
-        url: "/logo.jpg",
-        width: 720,
-        height: 720,
-        alt: "N°1 Restaurante e Choperia",
-      },
-    ],
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0f0d0a",
+  themeColor: "#0b0b0b",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="pt-BR"
-      className={`${display.variable} ${corpo.variable} ${mono.variable} h-full`}
+      className={`${display.variable} ${corpo.variable} ${mono.variable} ${script.variable} h-full`}
     >
       <body className="min-h-full">{children}</body>
     </html>

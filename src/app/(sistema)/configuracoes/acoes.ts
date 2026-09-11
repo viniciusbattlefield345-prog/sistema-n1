@@ -20,6 +20,7 @@ async function gravar(chave: string, valor: unknown): Promise<Resultado> {
   if (error) return { ok: false, erro: error.message };
 
   revalidatePath("/configuracoes");
+  revalidatePath("/impressao");
   revalidatePath("/imprimir", "layout");
   return { ok: true };
 }

@@ -23,14 +23,17 @@ const Icone = ({ d }: { d: string }) => (
 );
 
 const I = {
+  mesas: "M3 9h18M5 9v11M19 9v11M8 9V5h8v4M9 14h6",
   pdv: "M3 6h18M3 6l1.5 12h15L21 6M9 11v4M15 11v4",
   cozinha: "M6 3v8a3 3 0 0 0 6 0V3M9 11v10M15 3c-1.5 1.5-2 3-2 5s.5 3 2 3v10",
   pedidos: "M7 3h10a1 1 0 0 1 1 1v17l-3-2-3 2-3-2-3 2V4a1 1 0 0 1 1-1ZM9 8h6M9 12h6",
   caixa: "M3 7h18v12H3zM3 11h18M7 15h3",
+  impressao: "M7 8V3h10v5M7 17H4v-7h16v7h-3M7 14h10v7H7z",
   relatorios: "M4 20V10M10 20V4M16 20v-7M22 20H2",
   cardapio: "M4 3h16v18H4zM8 8h8M8 12h8M8 16h5",
   adicionais: "M12 5v14M5 12h14",
   categorias: "M4 6h16M4 12h16M4 18h10",
+  qr: "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 18h2v2h-2zM18 14h2M14 18h2",
   clientes: "M16 20v-1a4 4 0 0 0-8 0v1M12 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM21 20v-1a3 3 0 0 0-2-2.8",
   bairros: "M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11ZM12 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z",
   acessos: "M6 10V7a6 6 0 1 1 12 0v3M5 10h14v11H5zM12 15v2",
@@ -38,43 +41,50 @@ const I = {
   sair: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
 };
 
-/** `pronto` marca a tela que ja existe. As outras aparecem como "em breve",
- *  sem link — menu que leva a 404 e pior do que menu que avisa. */
 type Item = {
   href: string;
   rotulo: string;
   icone: string;
   dono?: boolean;
-  pronto?: boolean;
 };
 
 const VENDAS: Item[] = [
-  { href: "/pdv", rotulo: "Novo pedido", icone: I.pdv, pronto: true },
-  { href: "/cozinha", rotulo: "Cozinha", icone: I.cozinha, pronto: true },
-  { href: "/pedidos", rotulo: "Pedidos do dia", icone: I.pedidos, pronto: true },
-  { href: "/caixa", rotulo: "Caixa", icone: I.caixa, pronto: true },
+  { href: "/mesas", rotulo: "Mesas", icone: I.mesas },
+  { href: "/pdv", rotulo: "Novo pedido", icone: I.pdv },
+  { href: "/cozinha", rotulo: "Cozinha", icone: I.cozinha },
+  { href: "/pedidos", rotulo: "Pedidos", icone: I.pedidos },
+  { href: "/caixa", rotulo: "Caixa", icone: I.caixa },
+  { href: "/impressao", rotulo: "Impressão", icone: I.impressao },
 ];
 
 const GERENCIA: Item[] = [
-  { href: "/relatorios", rotulo: "Relatórios", icone: I.relatorios, dono: true, pronto: true },
-  { href: "/cardapio", rotulo: "Cardápio", icone: I.cardapio, pronto: true },
-  { href: "/adicionais", rotulo: "Adicionais", icone: I.adicionais, pronto: true },
-  { href: "/categorias", rotulo: "Categorias", icone: I.categorias, pronto: true },
-  { href: "/clientes", rotulo: "Clientes", icone: I.clientes, pronto: true },
-  { href: "/bairros", rotulo: "Bairros e taxas", icone: I.bairros, pronto: true },
-  { href: "/acessos", rotulo: "Acessos", icone: I.acessos, dono: true, pronto: true },
-  { href: "/configuracoes", rotulo: "Configurações", icone: I.config, dono: true, pronto: true },
+  { href: "/relatorios", rotulo: "Relatórios", icone: I.relatorios, dono: true },
+  { href: "/cardapio", rotulo: "Cardápio", icone: I.cardapio },
+  { href: "/adicionais", rotulo: "Adicionais", icone: I.adicionais },
+  { href: "/categorias", rotulo: "Categorias", icone: I.categorias },
+  { href: "/mesas/cadastro", rotulo: "Mesas e QR codes", icone: I.qr, dono: true },
+  { href: "/clientes", rotulo: "Clientes", icone: I.clientes },
+  { href: "/bairros", rotulo: "Bairros e taxas", icone: I.bairros },
+  { href: "/acessos", rotulo: "Acessos", icone: I.acessos, dono: true },
+  { href: "/configuracoes", rotulo: "Configurações", icone: I.config, dono: true },
 ];
+
+/** "/mesas/cadastro" acende só o item dele, não "Mesas" junto. */
+function itemAtivo(caminho: string): string | undefined {
+  return [...VENDAS, ...GERENCIA]
+    .filter((i) => caminho === i.href || caminho.startsWith(i.href + "/"))
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href;
+}
 
 function Grupo({
   titulo,
   itens,
-  atual,
+  ativo,
   papel,
 }: {
   titulo: string;
   itens: Item[];
-  atual: string;
+  ativo: string | undefined;
   papel: Papel;
 }) {
   const visiveis = itens.filter((i) => !i.dono || papel === "dono");
@@ -87,32 +97,15 @@ function Grupo({
       </p>
       <nav className="flex flex-col gap-0.5">
         {visiveis.map((item) => {
-          if (!item.pronto) {
-            return (
-              <span
-                key={item.href}
-                aria-disabled="true"
-                title="Ainda estamos construindo esta tela"
-                className="flex cursor-default items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-creme-fraco/60"
-              >
-                <Icone d={item.icone} />
-                <span className="flex-1">{item.rotulo}</span>
-                <span className="rounded border border-borda px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide">
-                  em breve
-                </span>
-              </span>
-            );
-          }
-
-          const ativo = atual === item.href || atual.startsWith(item.href + "/");
+          const aceso = ativo === item.href;
           return (
             <Link
               key={item.href}
               href={item.href}
-              aria-current={ativo ? "page" : undefined}
+              aria-current={aceso ? "page" : undefined}
               className={
                 "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors " +
-                (ativo
+                (aceso
                   ? "bg-ouro/12 font-semibold text-ouro"
                   : "text-creme-suave hover:bg-madeira hover:text-creme")
               }
@@ -136,7 +129,7 @@ export function BarraLateral({
   papel: Papel;
   aberto: boolean;
 }) {
-  const atual = usePathname();
+  const ativo = itemAtivo(usePathname());
   const primeiroNome = nome.split(" ")[0];
 
   return (
@@ -146,16 +139,13 @@ export function BarraLateral({
         (aberto ? "translate-x-0" : "-translate-x-full")
       }
     >
-      <div className="flex flex-col items-center gap-1 border-b border-borda px-4 py-4">
-        <Marca tamanho={92} comFita={false} />
-        <p className="font-display text-sm uppercase tracking-[0.12em] text-creme">
-          N°1 Restaurante
-        </p>
+      <div className="flex justify-center border-b border-borda px-4 py-5">
+        <Marca tamanho={1.3} />
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 py-4">
-        <Grupo titulo="Vendas" itens={VENDAS} atual={atual} papel={papel} />
-        <Grupo titulo="Gerência" itens={GERENCIA} atual={atual} papel={papel} />
+        <Grupo titulo="Vendas" itens={VENDAS} ativo={ativo} papel={papel} />
+        <Grupo titulo="Gerência" itens={GERENCIA} ativo={ativo} papel={papel} />
       </div>
 
       <div className="border-t border-borda p-3">

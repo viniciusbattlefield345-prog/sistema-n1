@@ -2,19 +2,21 @@
 
 import { revalidatePath } from "next/cache";
 import { criarClienteServidor } from "@/lib/supabase/server";
+import { clienteServico } from "@/lib/supabase/admin";
 
 export interface DadosProduto {
   id?: number;
   categoria_id: number | null;
   nome: string;
   descricao: string;
+  foto_url: string | null;
   preco_base: number;
   ativo: boolean;
   disponivel: boolean;
   ordem: number;
   /** Tamanhos. Lista vazia = produto de preço único. */
   variacoes: { id?: number; nome: string; preco: number; ordem: number }[];
-  /** Quais itens/adicionais este produto aceita. */
+  /** Quais adicionais este produto aceita. */
   adicionais: number[];
 }
 
@@ -42,6 +44,7 @@ export async function salvarProduto(dados: DadosProduto): Promise<Resultado> {
     categoria_id: dados.categoria_id,
     nome,
     descricao: dados.descricao.trim() || null,
+    foto_url: dados.foto_url || null,
     // Com tamanhos, o preço base vira o menor deles: é o "a partir de" do card.
     preco_base: variacoes.length
       ? Math.min(...variacoes.map((v) => v.preco))
@@ -86,7 +89,51 @@ export async function salvarProduto(dados: DadosProduto): Promise<Resultado> {
   return { ok: true, id: produtoId };
 }
 
-/** O botão "acabou hoje": tira do PDV sem apagar nada. */
+const TIPOS_FOTO = { "image/webp": "webp", "image/jpeg": "jpg", "image/png": "png" } as const;
+
+/**
+ * Sobe a foto de um produto pro Storage e devolve o link público.
+ * O navegador já manda a imagem reduzida (lado maior de 1000px), por isso
+ * o limite aqui é baixo: foto de celular crua passaria de 5 MB.
+ */
+export async function enviarFoto(
+  form: FormData,
+): Promise<{ ok: true; url: string } | { ok: false; erro: string }> {
+  const supabase = await criarClienteServidor();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, erro: "Sessão expirada." };
+
+  const arquivo = form.get("foto");
+  if (!(arquivo instanceof File) || arquivo.size === 0)
+    return { ok: false, erro: "Escolha uma imagem." };
+  if (arquivo.size > 900_000)
+    return { ok: false, erro: "A imagem ficou grande demais. Tente outra foto." };
+
+  const extensao = TIPOS_FOTO[arquivo.type as keyof typeof TIPOS_FOTO];
+  if (!extensao) return { ok: false, erro: "Use uma foto (JPG, PNG ou WebP)." };
+
+  const caminho = `produtos/${crypto.randomUUID()}.${extensao}`;
+  const storage = clienteServico().storage;
+  const subir = () =>
+    storage.from("cardapio").upload(caminho, arquivo, {
+      contentType: arquivo.type,
+      cacheControl: "31536000",
+    });
+
+  let { error } = await subir();
+  // O SQL cria a pasta "cardapio"; se alguém rodou sem ela, cria agora.
+  if (error && /not found/i.test(error.message)) {
+    await storage.createBucket("cardapio", { public: true });
+    ({ error } = await subir());
+  }
+  if (error) return { ok: false, erro: error.message };
+
+  return { ok: true, url: storage.from("cardapio").getPublicUrl(caminho).data.publicUrl };
+}
+
+/** O botão "acabou hoje": tira do PDV e do cardápio da mesa sem apagar nada. */
 export async function alternarDisponivel(
   id: number,
   disponivel: boolean,

@@ -12,7 +12,7 @@ import { criarClienteServidor } from "@/lib/supabase/server";
  * escrever, o que seria um buraco enorme.
  */
 const PERMITIDO = {
-  categorias: ["nome", "ordem", "ativo"],
+  categorias: ["nome", "descricao", "ordem", "ativo"],
   adicionais: ["nome", "preco", "grupo", "ordem", "ativo"],
   bairros: ["nome", "taxa", "ativo"],
 } as const;

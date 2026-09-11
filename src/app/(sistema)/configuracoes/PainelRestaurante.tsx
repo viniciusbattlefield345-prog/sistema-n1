@@ -9,7 +9,7 @@ const CAMPOS: { chave: keyof ConfigRestaurante; rotulo: string; dica?: string }[
   { chave: "slogan", rotulo: "Slogan" },
   { chave: "endereco", rotulo: "Endereço" },
   { chave: "telefone", rotulo: "Telefone" },
-  { chave: "whatsapp", rotulo: "WhatsApp (só números, com DDI)", dica: "Ex: 5528998839321" },
+  { chave: "whatsapp", rotulo: "WhatsApp (só números, com DDI)", dica: "Ex: 5528999998888" },
   { chave: "instagram", rotulo: "Instagram" },
   { chave: "horario", rotulo: "Horário de funcionamento" },
 ];
@@ -32,11 +32,11 @@ export function PainelRestaurante({ inicial }: { inicial: ConfigRestaurante }) {
 
   return (
     <section className="rounded-2xl border border-borda bg-carvao p-6">
-      <h2 className="mb-1 font-display text-xl uppercase tracking-wide text-creme">
-        Dados do restaurante
+      <h2 className="mb-1 font-display text-xl font-bold uppercase tracking-wide text-creme">
+        Dados da lanchonete
       </h2>
       <p className="mb-5 text-sm text-creme-suave">
-        É o que sai impresso no cabeçalho e no rodapé do cupom do cliente.
+        Sai no cabeçalho e no rodapé dos cupons. O Instagram também aparece no fim do cardápio da mesa.
       </p>
 
       <div className="grid gap-4 sm:grid-cols-2">
