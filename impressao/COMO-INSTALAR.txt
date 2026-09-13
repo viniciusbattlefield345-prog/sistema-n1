@@ -2,6 +2,21 @@ IMPRESSAO AUTOMATICA - GENERAL BURGUER
 Faca isto UMA VEZ, no computador onde a impressora termica esta ligada.
 =======================================================================
 
+JEITO FACIL (faz tudo sozinho)
+------------------------------
+Clique com o botao DIREITO em  INSTALAR.bat  (nesta mesma pasta)
+e escolha "Executar como administrador".
+
+Ele instala o QZ Tray, poe o certificado no lugar, reinicia o QZ,
+lista as impressoras do PC e abre a tela de Impressao no navegador.
+Depois disso so faltam os passos 4 e 5 la embaixo.
+
+Se der errado, faca na mao, do jeito de sempre:
+
+
+JEITO MANUAL
+------------
+
 1) Instale o QZ Tray
    https://qz.io/download/  ->  Windows  ->  instale e deixe abrir.
    Ele fica rodando na bandeja do Windows (perto do relogio).
