@@ -19,7 +19,7 @@ export async function entrar(
     return { erro: "Preencha o usuário e a senha." };
   }
 
-  // "arinete" vira "arinete@n1restaurante.com"; e-mail completo passa direto
+  // "vinicius" vira "vinicius@n1restaurante.com"; e-mail completo passa direto
   const email = usuarioParaEmail(usuario);
 
   const supabase = await criarClienteServidor();

@@ -1,13 +1,16 @@
 /**
- * O Supabase Auth exige e-mail, mas a equipe do restaurante entra por
- * nome de usuario: a Arinete digita "arinete", nao um endereco.
+ * O Supabase Auth exige e-mail, mas a equipe da lanchonete entra por
+ * nome de usuario: digita "vinicius", nao um endereco.
  *
  * O sistema completa o domínio por baixo. Quem digitar um e-mail
  * completo (com @) entra com ele mesmo — e-mail antigo continua valendo.
+ *
+ * O domínio é interno e nunca aparece na tela de ninguém. Trocar ele
+ * invalidaria todos os logins que já existem, então fica como está.
  */
 export const DOMINIO_INTERNO = "n1restaurante.com";
 
-/** "Arinete " -> "arinete@n1restaurante.com" · "eu@gmail.com" -> inalterado */
+/** "Vinicius " -> "vinicius@n1restaurante.com" · "eu@gmail.com" -> inalterado */
 export function usuarioParaEmail(digitado: string): string {
   const limpo = digitado.trim().toLowerCase();
   if (limpo.includes("@")) return limpo;
@@ -29,7 +32,7 @@ export function normalizarUsuario(nome: string): string {
     .replace(/[^a-z0-9._-]/g, "");
 }
 
-/** O contrário: mostra "arinete" em vez do e-mail interno. */
+/** O contrário: mostra "vinicius" em vez do e-mail interno. */
 export function emailParaUsuario(email: string): string {
   const [usuario, dominio] = email.split("@");
   return dominio === DOMINIO_INTERNO ? usuario : email;
