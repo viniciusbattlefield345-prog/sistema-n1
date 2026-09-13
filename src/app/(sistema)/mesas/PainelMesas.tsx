@@ -87,8 +87,8 @@ export function PainelMesas({
             Esperando aprovação ({aguardando.length})
           </h2>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {aguardando.map((p) => (
-              <CartaoAprovacao key={p.id} pedido={p} />
+            {aguardando.map((p, indice) => (
+              <CartaoAprovacao key={p.id} pedido={p} indice={indice} />
             ))}
           </div>
         </section>
@@ -119,12 +119,13 @@ export function PainelMesas({
           </Vazio>
         ) : (
           <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
-            {mesas.map((m) => (
+            {mesas.map((m, indice) => (
               <Link
                 key={m.id}
                 href={`/mesas/${m.id}`}
+                style={{ "--i": Math.min(indice, 8) } as React.CSSProperties}
                 className={
-                  "relative flex aspect-square flex-col justify-between rounded-2xl border p-3 transition-colors " +
+                  "anim-entrar relative flex aspect-square flex-col justify-between rounded-2xl border p-3 transition duration-150 active:scale-[0.97] " +
                   (m.aguardando > 0
                     ? "border-ouro bg-ouro/15"
                     : m.comanda
@@ -148,8 +149,10 @@ export function PainelMesas({
                   </span>
                 )}
                 {m.aguardando > 0 && (
+                  // a key muda junto com o número: o selo pula a cada pedido novo
                   <span
-                    className="absolute right-2 top-2 grid size-6 place-items-center rounded-full bg-ouro text-xs font-bold text-black"
+                    key={m.aguardando}
+                    className="anim-pulo absolute right-2 top-2 grid size-6 place-items-center rounded-full bg-ouro text-xs font-bold text-black"
                     aria-label={`${m.aguardando} pedido(s) esperando`}
                   >
                     {m.aguardando}

@@ -51,6 +51,16 @@
     color: var(--color-creme);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+    /* o quadrado cinza que o Android pinta ao tocar suja o cardápio */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* tira o atraso de ~300ms que o celular guarda esperando duplo toque */
+  button,
+  a,
+  label,
+  summary {
+    touch-action: manipulation;
   }
 
   /* numeros sempre alinhados em coluna: preco nao "dança" na tabela */
@@ -115,7 +125,14 @@
     font-size: 0.95rem;
     line-height: 1;
     cursor: pointer;
-    transition: background-color 120ms ease, border-color 120ms ease;
+    transition:
+      background-color 120ms ease,
+      border-color 120ms ease,
+      transform 90ms ease;
+  }
+  /* afunda no toque: no celular é o único jeito de sentir que pegou */
+  .btn:active:not(:disabled) {
+    transform: scale(0.975);
   }
   .btn:disabled {
     opacity: 0.4;
@@ -195,6 +212,140 @@
   }
   .cupom-linha-forte {
     border-bottom: 2px solid var(--color-borda-forte);
+  }
+}
+
+/* =====================================================================
+   MOVIMENTO
+   O cardápio é lido no celular, com uma mão, muitas vezes em rede ruim.
+   Por isso toda animação aqui é curta (150-320ms) e mexe só em opacity
+   e transform — as duas coisas que o celular anima sem repintar a tela.
+   Nada aqui segura o toque: a folha já responde enquanto entra.
+
+   Quem liga "reduzir movimento" no aparelho recebe tudo desligado pelo
+   bloco prefers-reduced-motion no fim deste arquivo.
+   ===================================================================== */
+
+@keyframes gb-surgir {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes gb-folha {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes gb-janela {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+}
+
+@keyframes gb-entrar {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+@keyframes gb-pulo {
+  35% {
+    transform: scale(1.16);
+  }
+}
+
+@keyframes gb-barra {
+  from {
+    opacity: 0;
+    transform: translateY(130%);
+  }
+}
+
+@keyframes gb-brilho {
+  from {
+    background-position: 180% 0;
+  }
+  to {
+    background-position: -180% 0;
+  }
+}
+
+@keyframes gb-batida {
+  50% {
+    opacity: 0.35;
+    transform: scale(0.82);
+  }
+}
+
+@layer components {
+  /* fundo escuro por trás da folha.
+     O preenchimento é "backwards", nunca "both": com "both" o navegador
+     segura o estado final da animação e a saída (que é feita com
+     transition) simplesmente não acontece. */
+  .anim-fundo {
+    animation: gb-surgir 180ms ease-out backwards;
+  }
+
+  /* a folha que sobe de baixo no celular; no computador ela abre no centro */
+  .anim-folha {
+    animation: gb-folha 300ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+  @media (min-width: 640px) {
+    .anim-folha {
+      animation-name: gb-janela;
+      animation-duration: 220ms;
+    }
+  }
+
+  /* cartão/linha que entra subindo; o atraso vem do --i de cada item */
+  .anim-entrar {
+    animation: gb-entrar 320ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+    animation-delay: calc(var(--i, 0) * 45ms);
+  }
+
+  /* barra do carrinho subindo do rodapé */
+  .anim-barra {
+    animation: gb-barra 260ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+
+  /* o número do carrinho dá um pulo quando muda */
+  .anim-pulo {
+    animation: gb-pulo 280ms ease-out;
+  }
+
+  /* aviso que chega (pedido enviado) */
+  .anim-aviso {
+    animation: gb-janela 260ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+
+  /* pontinho piscando: "esperando o atendente confirmar" */
+  .anim-batida {
+    animation: gb-batida 1.4s ease-in-out infinite;
+  }
+
+  /* lugar da foto enquanto ela não chega */
+  .anim-brilho {
+    background-image: linear-gradient(
+      100deg,
+      var(--color-madeira) 30%,
+      var(--color-borda) 48%,
+      var(--color-madeira) 66%
+    );
+    background-size: 220% 100%;
+    animation: gb-brilho 1.6s linear infinite;
+  }
+
+  /* linha de produto: some o cinza do toque e afunda de leve */
+  .toque {
+    transition: transform 110ms ease, background-color 140ms ease;
+  }
+  .toque:active {
+    transform: scale(0.99);
+    background-color: color-mix(in srgb, var(--color-creme) 4%, transparent);
   }
 }
 

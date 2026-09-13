@@ -17,6 +17,8 @@ import type { Adicional, Categoria, ItemCarrinho, Produto, StatusPedido } from "
 type Enviado = { id: number; em: number };
 
 const DOZE_HORAS = 12 * 3600_000;
+/** Tempo que a folha leva pra descer antes de sumir da tela. */
+const SAIDA_FOLHA = 180;
 const FINAIS: StatusPedido[] = ["CONCLUIDO", "CANCELADO"];
 
 const SITUACAO: Record<StatusPedido, { texto: string; cor: string }> = {
@@ -80,6 +82,7 @@ export function CardapioMesa({
   const [confirmado, setConfirmado] = useState<number | null>(null);
   const [meus, setMeus] = useState<SituacaoPedido[]>([]);
   const [ativa, setAtiva] = useState<string | null>(null);
+  const [saindo, setSaindo] = useState<"carrinho" | "escolha" | null>(null);
   const [enviando, iniciar] = useTransition();
 
   const carregou = useRef(false);
@@ -183,11 +186,28 @@ export function CardapioMesa({
   const quantidadeItens = itens.reduce((s, i) => s + i.quantidade, 0);
   const subtotal = subtotalCarrinho(itens);
 
+  /* Fechar é em dois tempos: a folha desce, e só então sai da tela. */
+  function fecharCarrinho() {
+    setSaindo("carrinho");
+    setTimeout(() => {
+      setVerCarrinho(false);
+      setSaindo(null);
+    }, SAIDA_FOLHA);
+  }
+
+  function fecharEscolha() {
+    setSaindo("escolha");
+    setTimeout(() => {
+      setEscolhendo(null);
+      setSaindo(null);
+    }, SAIDA_FOLHA);
+  }
+
   function adicionar(item: ItemCarrinho) {
     setItens((atual) => [...atual, item]);
-    setEscolhendo(null);
     setErro(null);
     setConfirmado(null);
+    fecharEscolha();
   }
 
   function mudarQuantidade(chave: string, delta: number) {
@@ -224,7 +244,7 @@ export function CardapioMesa({
         gravar("gb:nome", nome.trim());
         setItens([]);
         setObservacao("");
-        setVerCarrinho(false);
+        fecharCarrinho();
         setConfirmado(r.numero_dia ?? 0);
         void atualizar();
       } catch {
@@ -234,7 +254,9 @@ export function CardapioMesa({
   }
 
   return (
-    <div className="min-h-screen bg-breu pb-32 text-creme">
+    // O cardápio é feito pra uma mão: no computador ele fica numa coluna
+    // central em vez de esticar a linha do produto pela tela toda.
+    <div className="mx-auto min-h-screen max-w-2xl bg-breu pb-32 text-creme">
       {/* topo com a curva laranja do cardápio impresso */}
       <header className="relative overflow-hidden bg-black px-5 pb-12 pt-6">
         <div className="flex items-start justify-between gap-4">
@@ -277,15 +299,31 @@ export function CardapioMesa({
             Seus pedidos
           </h2>
           <ul className="space-y-3">
-            {meus.map((p) => (
-              <li key={p.id} className="border-t border-borda pt-3 first:border-0 first:pt-0">
+            {meus.map((p, indice) => (
+              <li
+                key={p.id}
+                style={{ "--i": Math.min(indice, 5) } as React.CSSProperties}
+                className="anim-entrar border-t border-borda pt-3 first:border-0 first:pt-0"
+              >
                 <div className="flex items-baseline justify-between gap-3">
                   <span className="font-display font-bold">
                     Pedido {numeroPedido(p.numero_dia)}
                   </span>
                   <span className="tabular text-sm text-creme-suave">{reais(p.total)}</span>
                 </div>
-                <p className={"mt-0.5 text-sm font-semibold " + SITUACAO[p.status].cor}>
+                <p
+                  className={
+                    "mt-0.5 flex items-center gap-1.5 text-sm font-semibold " +
+                    SITUACAO[p.status].cor
+                  }
+                >
+                  {/* pedido ainda andando: o pontinho pisca pra mostrar que está vivo */}
+                  {!FINAIS.includes(p.status) && (
+                    <span
+                      aria-hidden
+                      className="anim-batida size-1.5 shrink-0 rounded-full bg-current"
+                    />
+                  )}
                   {SITUACAO[p.status].texto}
                 </p>
                 {p.status === "CANCELADO" && p.motivo_recusa && (
@@ -353,13 +391,17 @@ export function CardapioMesa({
             </header>
 
             <ul className="divide-y divide-borda">
-              {s.produtos.map((p) => (
-                <li key={p.id}>
+              {s.produtos.map((p, indice) => (
+                <li
+                  key={p.id}
+                  style={{ "--i": Math.min(indice, 6) } as React.CSSProperties}
+                  className="anim-entrar"
+                >
                   <button
                     type="button"
                     onClick={() => setEscolhendo(p)}
                     disabled={!p.disponivel}
-                    className="flex w-full items-start gap-3 py-4 text-left disabled:opacity-45"
+                    className="toque flex w-full items-start gap-3 rounded-2xl py-4 text-left disabled:opacity-45"
                   >
                     <div className="min-w-0 flex-1">
                       <h3 className="font-display text-[0.95rem] font-bold uppercase leading-snug text-ouro">
@@ -381,13 +423,7 @@ export function CardapioMesa({
                       )}
                     </div>
                     {p.foto_url && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={p.foto_url}
-                        alt=""
-                        loading="lazy"
-                        className="size-24 shrink-0 rounded-2xl object-cover"
-                      />
+                      <Foto url={p.foto_url} className="size-24 shrink-0 rounded-2xl" />
                     )}
                   </button>
                 </li>
@@ -405,10 +441,10 @@ export function CardapioMesa({
 
       {/* pedido enviado */}
       {confirmado !== null && itens.length === 0 && (
-        <div className="fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <div className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-2xl px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <div
             role="status"
-            className="rounded-2xl border border-pronto/50 bg-carvao p-4 shadow-2xl shadow-black"
+            className="anim-aviso rounded-2xl border border-pronto/50 bg-carvao p-4 shadow-2xl shadow-black"
           >
             <p className="font-display text-lg font-extrabold uppercase text-pronto">
               Pedido {numeroPedido(confirmado)} enviado!
@@ -429,14 +465,19 @@ export function CardapioMesa({
 
       {/* barra do carrinho */}
       {itens.length > 0 && !verCarrinho && (
-        <div className="fixed inset-x-0 bottom-0 z-40 bg-gradient-to-t from-breu via-breu/95 to-transparent px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-8">
+        <div className="anim-barra fixed inset-x-0 bottom-0 z-40 mx-auto max-w-2xl bg-gradient-to-t from-breu via-breu/95 to-transparent px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-8">
           <button
             type="button"
             onClick={() => setVerCarrinho(true)}
             className="btn btn-ouro w-full justify-between px-5 py-4 text-base"
           >
             <span>
-              Ver pedido · {quantidadeItens} {quantidadeItens === 1 ? "item" : "itens"}
+              Ver pedido ·{" "}
+              {/* a key troca a cada item: é o que faz o número pular de novo */}
+              <span key={quantidadeItens} className="anim-pulo inline-block">
+                {quantidadeItens}
+              </span>{" "}
+              {quantidadeItens === 1 ? "item" : "itens"}
             </span>
             <span className="tabular">{reais(subtotal)}</span>
           </button>
@@ -444,14 +485,14 @@ export function CardapioMesa({
       )}
 
       {verCarrinho && (
-        <Folha rotulo="Seu pedido" aoFechar={() => setVerCarrinho(false)}>
+        <Folha rotulo="Seu pedido" saindo={saindo === "carrinho"} aoFechar={fecharCarrinho}>
           <header className="flex items-center justify-between gap-3 border-b border-borda px-5 py-4">
             <h2 className="font-display text-lg font-extrabold uppercase">
               Seu pedido · Mesa {mesa.numero}
             </h2>
             <button
               type="button"
-              onClick={() => setVerCarrinho(false)}
+              onClick={fecharCarrinho}
               className="text-sm text-creme-suave underline underline-offset-2"
             >
               Voltar
@@ -506,7 +547,7 @@ export function CardapioMesa({
             <div className="mt-7 space-y-4">
               <div>
                 <label className="rotulo" htmlFor="cliente-nome">
-                  Seu nome (opcional)
+                  Quem está pedindo? (opcional)
                 </label>
                 <input
                   id="cliente-nome"
@@ -515,8 +556,12 @@ export function CardapioMesa({
                   autoComplete="given-name"
                   value={nome}
                   onChange={(e) => setNome(e.target.value)}
-                  placeholder="Pra gente saber de quem é"
+                  placeholder="Ex.: Vinícius"
                 />
+                <p className="mt-1.5 text-xs text-creme-fraco">
+                  Só pra entregar na mão certa quando a mesa tem mais gente. A conta é
+                  uma só, da mesa.
+                </p>
               </div>
               <div>
                 <label className="rotulo" htmlFor="pedido-obs">
@@ -566,7 +611,8 @@ export function CardapioMesa({
           produto={escolhendo}
           adicionais={adicionais}
           lojaAberta={lojaAberta}
-          aoFechar={() => setEscolhendo(null)}
+          saindo={saindo === "escolha"}
+          aoFechar={fecharEscolha}
           aoAdicionar={adicionar}
         />
       )}
@@ -578,10 +624,13 @@ export function CardapioMesa({
 function Folha({
   rotulo,
   aoFechar,
+  saindo = false,
   children,
 }: {
   rotulo: string;
   aoFechar: () => void;
+  /** Ligado pelo pai durante os SAIDA_FOLHA ms em que a folha desce. */
+  saindo?: boolean;
   children: React.ReactNode;
 }) {
   useEffect(() => {
@@ -597,7 +646,10 @@ function Folha({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/75 sm:items-center sm:p-4"
+      className={
+        "anim-fundo fixed inset-0 z-50 flex items-end justify-center bg-black/75 transition-opacity duration-150 sm:items-center sm:p-4 " +
+        (saindo ? "opacity-0" : "opacity-100")
+      }
       onClick={aoFechar}
       role="presentation"
     >
@@ -606,11 +658,37 @@ function Folha({
         aria-modal="true"
         aria-label={rotulo}
         onClick={(e) => e.stopPropagation()}
-        className="flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-borda bg-carvao sm:rounded-3xl"
+        className={
+          "anim-folha flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-borda bg-carvao transition-transform duration-150 ease-in sm:rounded-3xl " +
+          (saindo ? "translate-y-full sm:translate-y-0 sm:scale-95" : "translate-y-0")
+        }
       >
         {children}
       </div>
     </div>
+  );
+}
+
+/** Foto do produto: o lugar já fica reservado, brilhando, até ela chegar. */
+function Foto({ url, className = "" }: { url: string; className?: string }) {
+  const [pronta, setPronta] = useState(false);
+
+  return (
+    <span className={"relative block overflow-hidden " + className}>
+      {!pronta && <span aria-hidden className="anim-brilho absolute inset-0" />}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={url}
+        alt=""
+        loading="lazy"
+        onLoad={() => setPronta(true)}
+        onError={() => setPronta(true)}
+        className={
+          "size-full object-cover transition-opacity duration-300 " +
+          (pronta ? "opacity-100" : "opacity-0")
+        }
+      />
+    </span>
   );
 }
 
@@ -639,12 +717,14 @@ function EscolhaProduto({
   produto,
   adicionais,
   lojaAberta,
+  saindo,
   aoFechar,
   aoAdicionar,
 }: {
   produto: Produto;
   adicionais: Adicional[];
   lojaAberta: boolean;
+  saindo: boolean;
   aoFechar: () => void;
   aoAdicionar: (item: ItemCarrinho) => void;
 }) {
@@ -682,15 +762,10 @@ function EscolhaProduto({
   }
 
   return (
-    <Folha rotulo={produto.nome} aoFechar={aoFechar}>
+    <Folha rotulo={produto.nome} saindo={saindo} aoFechar={aoFechar}>
       <div className="flex-1 overflow-y-auto pb-4">
         {produto.foto_url && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={produto.foto_url}
-            alt={produto.nome}
-            className="aspect-[4/3] w-full object-cover"
-          />
+          <Foto url={produto.foto_url} className="aspect-[4/3] w-full" />
         )}
         <div className="px-5 pt-5">
           <h2 className="font-display text-xl font-extrabold uppercase leading-tight text-ouro">

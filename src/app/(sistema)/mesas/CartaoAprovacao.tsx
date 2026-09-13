@@ -8,7 +8,14 @@ import type { Pedido } from "@/lib/tipos";
 const MOTIVOS = ["Item acabou", "Pedido repetido", "Cozinha fechando", "Fale com o atendente"];
 
 /** Pedido feito pelo QR, esperando alguém da equipe dizer sim ou não. */
-export function CartaoAprovacao({ pedido }: { pedido: Pedido }) {
+export function CartaoAprovacao({
+  pedido,
+  indice = 0,
+}: {
+  pedido: Pedido;
+  /** Posição na fila: os cartões entram um atrás do outro, não todos juntos. */
+  indice?: number;
+}) {
   const [recusando, setRecusando] = useState(false);
   const [motivo, setMotivo] = useState("");
   const [erro, setErro] = useState<string | null>(null);
@@ -34,7 +41,10 @@ export function CartaoAprovacao({ pedido }: { pedido: Pedido }) {
   }
 
   return (
-    <article className="rounded-2xl border-2 border-ouro/70 bg-carvao p-4">
+    <article
+      style={{ "--i": Math.min(indice, 4) } as React.CSSProperties}
+      className="anim-entrar rounded-2xl border-2 border-ouro/70 bg-carvao p-4"
+    >
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="font-display text-2xl font-extrabold uppercase leading-none text-ouro">
