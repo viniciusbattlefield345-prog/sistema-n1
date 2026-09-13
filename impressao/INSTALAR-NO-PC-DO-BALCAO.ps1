@@ -5,7 +5,7 @@
 # =====================================================================
 
 $ErrorActionPreference = "Stop"
-$SITE = "https://arinete.vercel.app/impressao"   # trocar se o dominio mudar
+$SITE = "https://generalburguer.vercel.app/impressao"   # trocar se o dominio mudar
 $PASTA_QZ = "C:\Program Files\QZ Tray"
 
 # --- 1. Precisa de administrador pra escrever em Program Files ---------
