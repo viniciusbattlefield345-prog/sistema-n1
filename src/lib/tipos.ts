@@ -231,4 +231,8 @@ export interface ConfigImpressoras {
   cortar: boolean;
   abrir_gaveta: boolean;
   vias: number;
+  /** Via da cozinha: o que montar, em letra grande e sem nenhum preço. */
+  via_cozinha: boolean;
+  /** Via do caixa: a mesma coisa com preço, total e forma de pagamento. */
+  via_caixa: boolean;
 }

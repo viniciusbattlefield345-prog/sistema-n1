@@ -152,9 +152,14 @@ export function PainelImpressoras({
             value={cfg.colunas}
             onChange={(e) => campo("colunas", Number(e.target.value))}
           >
-            <option value={48}>80 mm (48 colunas)</option>
-            <option value={32}>58 mm (32 colunas)</option>
+            <option value={48}>80 mm — 48 colunas</option>
+            <option value={42}>80 mm estreito — 42 colunas</option>
+            <option value={32}>58 mm — 32 colunas</option>
           </select>
+          <p className="mt-1 text-xs text-creme-fraco">
+            Se o preço estiver caindo pra linha de baixo, é aqui: a impressora
+            imprime menos colunas do que o escolhido.
+          </p>
         </div>
         <div>
           <label className="rotulo" htmlFor="vias">
@@ -168,6 +173,33 @@ export function PainelImpressoras({
             onChange={(e) => campo("vias", Math.min(5, Math.max(1, Number(e.target.value) || 1)))}
           />
         </div>
+      </div>
+
+      <div className="mt-5 grid max-w-md gap-2 rounded-xl border border-borda bg-breu p-4">
+        <p className="text-xs uppercase tracking-wide text-creme-fraco">
+          Vias de cada pedido aprovado
+        </p>
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-creme-suave">
+          <input
+            type="checkbox"
+            className="accent-ouro"
+            checked={cfg.via_cozinha}
+            onChange={(e) => campo("via_cozinha", e.target.checked)}
+          />
+          Via da cozinha — o que montar, em letra grande e sem preço
+        </label>
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-creme-suave">
+          <input
+            type="checkbox"
+            className="accent-ouro"
+            checked={cfg.via_caixa}
+            onChange={(e) => campo("via_caixa", e.target.checked)}
+          />
+          Via do caixa — com preço, total e pagamento
+        </label>
+        <p className="text-xs text-creme-fraco">
+          As duas saem de uma vez, separadas pelo corte do papel.
+        </p>
       </div>
 
       <div className="mt-4 flex flex-wrap gap-5">

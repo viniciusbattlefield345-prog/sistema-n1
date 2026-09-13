@@ -41,17 +41,49 @@ function totalGrande(c: Cupom, rotulo: string, valor: number) {
   c.tamanho(1).negrito(false);
 }
 
+/** Só o que a cozinha precisa: quantidade, produto, adicional e observação. */
+function listaDeItensCozinha(c: Cupom, itens: ItemPedido[]) {
+  for (const item of itens) {
+    const descricao = item.variacao_nome
+      ? `${item.produto_nome} (${item.variacao_nome})`
+      : item.produto_nome;
+    c.tamanho(2).negrito(true).item(Number(item.quantidade), descricao.toUpperCase(), "");
+    c.tamanho(1).negrito(false);
+    for (const extra of item.item_adicionais ?? []) c.detalhe(`+ ${extra.nome}`);
+    if (item.observacao) {
+      c.negrito(true).detalhe(`>> ${item.observacao.toUpperCase()}`).negrito(false);
+    }
+  }
+}
+
 /**
- * O cupom do pedido — um só, completo. É o que a cozinha lê pra montar e o
- * que acompanha o lanche até a mesa ou a sacola.
+ * A via da cozinha: nenhum preço. Quem está na chapa não precisa saber quanto
+ * custa — precisa enxergar o que montar de longe, com a mão ocupada. Por isso
+ * o item vai em letra dobrada e o resto é enxuto.
+ */
+function corpoCozinha(c: Cupom, pedido: Pedido) {
+  c.alinhar(1).negrito(true).tamanho(2).linha("COZINHA");
+  c.tamanho(3).linha(rotuloPedido(pedido).toUpperCase());
+  c.tamanho(2).linha(`PEDIDO ${numeroPedido(pedido.numero_dia)}`);
+  c.tamanho(1).negrito(false).linha(hora(pedido.criado_em));
+  c.alinhar(0).separador("=");
+
+  listaDeItensCozinha(c, pedido.itens_pedido ?? []);
+
+  if (pedido.observacao) {
+    c.separador();
+    c.negrito(true).linha("OBSERVACAO DO PEDIDO:").negrito(false);
+    c.detalhe(pedido.observacao, 0);
+  }
+  c.separador("=");
+}
+
+/**
+ * A via do caixa: a mesma comanda com preço, total e forma de pagamento.
+ * É a que acompanha o lanche até a mesa ou a sacola.
  * A mesa sai em letra gigante: é a primeira coisa que alguém procura no papel.
  */
-export function viaPedido(
-  pedido: Pedido,
-  restaurante: ConfigRestaurante,
-  cfg: ConfigImpressoras,
-): string {
-  const c = new Cupom(cfg.colunas);
+function corpoCaixa(c: Cupom, pedido: Pedido, restaurante: ConfigRestaurante) {
   const rotulo = rotuloPedido(pedido);
 
   cabecalho(c, restaurante);
@@ -103,10 +135,37 @@ export function viaPedido(
   }
 
   c.separador("=");
-  if (cfg.abrir_gaveta && pedido.tipo !== "MESA" && pedido.forma_pagamento === "Dinheiro") {
-    c.abrirGaveta();
+}
+
+/**
+ * O cupom de um pedido aprovado. Sai em duas vias num envio só — a da cozinha
+ * e a do caixa — separadas pela guilhotina. Quem quiser uma só desliga a
+ * outra em Configurações.
+ */
+export function viaPedido(
+  pedido: Pedido,
+  restaurante: ConfigRestaurante,
+  cfg: ConfigImpressoras,
+): string {
+  const c = new Cupom(cfg.colunas);
+  // Desligar as duas seria papel em branco: sobra a do caixa, que tem o total.
+  const caixa = cfg.via_caixa || !cfg.via_cozinha;
+
+  if (cfg.via_cozinha) {
+    corpoCozinha(c, pedido);
+    if (cfg.cortar) c.cortar();
+    else c.pular(3);
+    if (caixa) c.novaVia();
   }
-  if (cfg.cortar) c.cortar();
+
+  if (caixa) {
+    corpoCaixa(c, pedido, restaurante);
+    if (cfg.abrir_gaveta && pedido.tipo !== "MESA" && pedido.forma_pagamento === "Dinheiro") {
+      c.abrirGaveta();
+    }
+    if (cfg.cortar) c.cortar();
+  }
+
   return c.paraBase64();
 }
 

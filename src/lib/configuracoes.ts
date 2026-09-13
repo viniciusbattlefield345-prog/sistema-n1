@@ -16,6 +16,8 @@ export const IMPRESSORAS_PADRAO: ConfigImpressoras = {
   cortar: true,
   abrir_gaveta: false,
   vias: 1,
+  via_cozinha: true,
+  via_caixa: true,
 };
 
 /**
