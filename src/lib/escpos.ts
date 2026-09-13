@@ -61,6 +61,10 @@ export class Cupom {
   constructor(private colunas = 48) {
     this.cru(ESC, 0x40); // inicializa
     this.cru(ESC, 0x74, 0x02); // página de código CP850
+    // Dupla batida: a cabeça aquece cada ponto duas vezes. É o que tira o
+    // cinza do papel térmico barato e deixa o cupom legível no balcão.
+    // Fica ligado do começo ao fim: nada aqui desliga.
+    this.cru(ESC, 0x47, 0x01);
   }
 
   /** Colunas que cabem numa linha com o tamanho de letra atual. */
@@ -141,12 +145,17 @@ export class Cupom {
     if (atual) linhas.push(atual);
     if (linhas.length === 0) linhas.push("");
 
+    // A linha do item sai em altura dobrada: é a única coisa que alguém lê
+    // de longe, com o papel na mão e a chapa cheia. Só a altura — dobrar a
+    // largura também comeria metade das colunas e jogaria o preço pra baixo.
     const primeira = linhas[0];
     const preenchimento = this.largura - prefixo.length - primeira.length - valor.length;
+    this.cru(GS, 0x21, 0x01);
     this.linha(prefixo + primeira + " ".repeat(Math.max(1, preenchimento)) + valor);
     for (const resto of linhas.slice(1)) {
       this.linha(" ".repeat(prefixo.length) + resto);
     }
+    this.cru(GS, 0x21, (this.escala - 1) * 0x11);
     return this;
   }
 
