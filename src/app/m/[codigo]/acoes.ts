@@ -18,6 +18,13 @@ import type { StatusPedido } from "@/lib/tipos";
 /** Pedidos da mesma conta esperando aprovação. Acima disso, é trote ou toque repetido. */
 const LIMITE_AGUARDANDO = 3;
 
+/**
+ * O nome é obrigatório: é por ele que o atendente sabe de quem é o pedido
+ * quando a mesa tem mais de uma pessoa. A tela pede antes do cardápio, mas
+ * a trava que vale é esta — a de lá se contorna pelo navegador.
+ */
+const NOME_MINIMO = 2;
+
 export type RespostaEnvio =
   | { ok: true; pedido_id: number; numero_dia: number | null }
   | { ok: false; erro: string };
@@ -44,6 +51,10 @@ export async function enviarPedido(
   if (!caixa)
     return { ok: false, erro: "Estamos fechados agora. Chame o atendente." };
 
+  const nome = String(dados?.nome ?? "").trim().slice(0, 40);
+  if (nome.length < NOME_MINIMO)
+    return { ok: false, erro: "Diga seu nome pra eu mandar o pedido pra cozinha." };
+
   const montagem = await montarItens(sb, dados?.itens ?? [], true);
   if (!montagem.ok) return montagem;
 
@@ -61,7 +72,6 @@ export async function enviarPedido(
       erro: "Seus pedidos anteriores ainda estão esperando o atendente confirmar. Aguarde um instante.",
     };
 
-  const nome = String(dados?.nome ?? "").trim().slice(0, 40);
   const resultado = await gravarPedido(
     sb,
     {
@@ -72,7 +82,7 @@ export async function enviarPedido(
       mesa_id: mesa.id,
       comanda_id: conta.id,
       cliente_id: null,
-      cliente_nome: nome || `Mesa ${mesa.numero}`,
+      cliente_nome: nome,
       cliente_telefone: null,
       endereco_entrega: null,
       taxa_entrega: 0,

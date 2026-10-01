@@ -24,6 +24,7 @@ import {
   numeroPedido,
   paraNumero,
   reais,
+  rotuloPedido,
 } from "@/lib/formato";
 import type {
   Comanda,
@@ -74,6 +75,12 @@ export function DetalheMesa({
   const esperando = pedidos.filter((p) => p.status === "AGUARDANDO");
   const outros = pedidos.filter((p) => p.status !== "AGUARDANDO");
   const semPedidoValido = pedidos.every((p) => p.status === "CANCELADO");
+  const validos = pedidos.filter((p) => p.status !== "CANCELADO");
+  const naCozinha = outros.filter(
+    (p) => p.status === "PENDENTE" || p.status === "EM PREPARO",
+  ).length;
+  const prontos = outros.filter((p) => p.status === "PRONTO").length;
+  const servidos = outros.filter((p) => p.status === "CONCLUIDO").length;
   const impressaoConta = impressoes.find((t) => t.tipo === "CONTA");
 
   function acao(fn: () => Promise<{ ok: boolean; erro?: string }>, sucesso?: string) {
@@ -100,7 +107,12 @@ export function DetalheMesa({
           </h1>
           {comanda && (
             <p className="mt-1 text-sm text-creme-suave">
-              Aberta às {hora(comanda.aberta_em)} · há {duracao(minutosDesde(comanda.aberta_em))}
+              Aberta às {hora(comanda.aberta_em)} · há{" "}
+              {duracao(minutosDesde(comanda.aberta_em))} ·{" "}
+              <span className="tabular font-bold text-ouro">
+                {reais(Number(comanda.total))}
+              </span>{" "}
+              · {validos.length === 1 ? "1 pedido" : `${validos.length} pedidos`}
             </p>
           )}
         </div>
@@ -108,6 +120,14 @@ export function DetalheMesa({
           Lançar pedido
         </Link>
       </header>
+
+      <FaixaSituacao
+        comanda={comanda}
+        esperando={esperando}
+        naCozinha={naCozinha}
+        prontos={prontos}
+        servidos={servidos}
+      />
 
       {erro && (
         <p
@@ -222,6 +242,96 @@ export function DetalheMesa({
           </aside>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Quem fez o pedido. Pedido antigo pode não ter nome: era opcional. */
+function quemPediu(p: Pedido): string {
+  const rotulo = rotuloPedido(p);
+  return p.cliente_nome && p.cliente_nome !== rotulo ? p.cliente_nome : "sem nome";
+}
+
+/**
+ * O estado da mesa em uma frase, no topo da tela.
+ *
+ * É o que o atendente lê de longe, sem precisar contar cartões: mostra um
+ * estado só, o mais urgente primeiro. Aprovação pendente ganha de tudo.
+ */
+function FaixaSituacao({
+  comanda,
+  esperando,
+  naCozinha,
+  prontos,
+  servidos,
+}: {
+  comanda: Comanda | null;
+  esperando: Pedido[];
+  naCozinha: number;
+  prontos: number;
+  servidos: number;
+}) {
+  const base = "mb-5 rounded-2xl border px-4 py-3.5";
+
+  if (esperando.length > 0) {
+    return (
+      <div role="status" className={`${base} border-ouro bg-ouro/15`}>
+        <p className="flex items-center gap-2 font-display text-lg font-extrabold uppercase leading-tight text-ouro">
+          <span className="relative flex size-2.5 shrink-0">
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-ouro opacity-75" />
+            <span className="relative inline-flex size-2.5 rounded-full bg-ouro" />
+          </span>
+          {esperando.length === 1
+            ? "1 pedido esperando sua aprovação"
+            : `${esperando.length} pedidos esperando sua aprovação`}
+        </p>
+        <p className="mt-1.5 text-sm text-creme-suave">
+          {esperando
+            .map((p) => `${quemPediu(p)}, há ${duracao(minutosDesde(p.criado_em))}`)
+            .join(" · ")}
+        </p>
+      </div>
+    );
+  }
+
+  if (!comanda) {
+    return (
+      <div className={`${base} border-borda bg-carvao`}>
+        <p className="font-display text-lg font-extrabold uppercase text-creme-suave">
+          Mesa livre
+        </p>
+        <p className="mt-1 text-sm text-creme-fraco">
+          Nenhum pedido. A conta abre sozinha no primeiro.
+        </p>
+      </div>
+    );
+  }
+
+  const andando = [
+    naCozinha > 0 ? `${naCozinha} na cozinha` : null,
+    prontos > 0 ? `${prontos} pronto${prontos > 1 ? "s" : ""} pra levar` : null,
+    servidos > 0 ? `${servidos} servido${servidos > 1 ? "s" : ""}` : null,
+  ].filter(Boolean);
+
+  if (andando.length === 0) {
+    return (
+      <div className={`${base} border-borda bg-carvao`}>
+        <p className="font-display text-lg font-extrabold uppercase text-creme-suave">
+          Conta aberta, sem pedido
+        </p>
+        <p className="mt-1 text-sm text-creme-fraco">
+          Nada pra aprovar e nada na cozinha.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`${base} border-pronto/40 bg-pronto/10`}>
+      <p className="font-display text-lg font-extrabold uppercase text-pronto">
+        Em andamento
+      </p>
+      <p className="mt-1 text-sm text-creme-suave">{andando.join(" · ")}</p>
     </div>
   );
 }

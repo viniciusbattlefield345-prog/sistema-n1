@@ -90,7 +90,7 @@ function AvisoAguardando() {
   const caminho = usePathname();
 
   useEffect(() => {
-    prepararSom();
+    const soltarSom = prepararSom();
     const supabase = criarClienteNavegador();
     let vivo = true;
 
@@ -110,7 +110,9 @@ function AvisoAguardando() {
       .channel(`aviso-aguardando-${Math.random().toString(36).slice(2)}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "pedidos" }, () => void contar())
       .subscribe();
-    const relogio = setInterval(() => void contar(), 20000);
+    // Rede de segurança pra quando o tempo real cai (Wi-Fi ruim, aba velha):
+    // 8s é o atraso máximo que um pedido pode ficar invisível pro atendente.
+    const relogio = setInterval(() => void contar(), 8000);
     const aoVoltar = () => {
       if (document.visibilityState === "visible") void contar();
     };
@@ -119,6 +121,7 @@ function AvisoAguardando() {
     return () => {
       vivo = false;
       clearInterval(relogio);
+      soltarSom();
       document.removeEventListener("visibilitychange", aoVoltar);
       void supabase.removeChannel(canal);
     };

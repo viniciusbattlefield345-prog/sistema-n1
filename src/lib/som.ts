@@ -9,20 +9,52 @@
 
 const CHAVE = "gb:som";
 let contexto: AudioContext | null = null;
+let destravado = false;
 
-/** Chame uma vez: destrava o áudio no primeiro toque ou tecla. */
-export function prepararSom() {
-  if (typeof window === "undefined") return;
+/** O navegador já liberou o áudio? Enquanto não libera, sai só vibração. */
+export function somDestravado(): boolean {
+  return destravado;
+}
+
+/**
+ * Chame uma vez: destrava o áudio no primeiro toque ou tecla.
+ *
+ * Avisa por `aoDestravar` quando conseguiu, pra tela poder dizer a verdade
+ * em vez de mostrar "som ligado" com o apito ainda mudo. Devolve a função
+ * que solta os ouvintes.
+ */
+export function prepararSom(aoDestravar?: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  if (destravado) {
+    aoDestravar?.();
+    return () => {};
+  }
+
+  const soltar = () => {
+    window.removeEventListener("pointerdown", destravar);
+    window.removeEventListener("keydown", destravar);
+  };
+
   const destravar = () => {
     try {
       contexto ??= new AudioContext();
-      if (contexto.state === "suspended") void contexto.resume();
+      // resume() é assíncrono: só dá pra garantir que destravou depois dele.
+      const conferir = () => {
+        if (contexto?.state !== "running") return;
+        destravado = true;
+        soltar();
+        aoDestravar?.();
+      };
+      if (contexto.state === "suspended") void contexto.resume().then(conferir, () => {});
+      else conferir();
     } catch {
       // navegador sem Web Audio: fica só a vibração
     }
   };
-  window.addEventListener("pointerdown", destravar, { once: true });
-  window.addEventListener("keydown", destravar, { once: true });
+
+  window.addEventListener("pointerdown", destravar);
+  window.addEventListener("keydown", destravar);
+  return soltar;
 }
 
 export function somLigado(): boolean {

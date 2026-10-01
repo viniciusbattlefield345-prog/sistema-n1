@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Cabecalho, Vazio } from "@/components/Cabecalho";
 import { CartaoAprovacao } from "./CartaoAprovacao";
 import { useAoVivo } from "@/lib/aoVivo";
-import { definirSom, somLigado } from "@/lib/som";
+import { definirSom, prepararSom, somDestravado, somLigado } from "@/lib/som";
 import { duracao, minutosDesde, reais } from "@/lib/formato";
 import type { Pedido } from "@/lib/tipos";
 
@@ -35,7 +35,9 @@ export function PainelMesas({
   impressaoAtrasada: number;
   falhasImpressao: number;
 }) {
-  useAoVivo(["pedidos", "comandas", "fila_impressao"]);
+  // 10s em vez dos 30s padrão: é a tela onde o atendente fica esperando
+  // pedido, então ela não pode ficar meia dúzia de segundos atrás do apito.
+  useAoVivo(["pedidos", "comandas", "fila_impressao"], 10);
 
   const ocupadas = mesas.filter((m) => m.comanda).length;
 
@@ -191,11 +193,15 @@ function Controles() {
   const [som, setSom] = useState(true);
   const [podeTravar, setPodeTravar] = useState(false);
   const [telaLigada, setTelaLigada] = useState(false);
+  // Começa como destravado pra não piscar o aviso antes de saber a verdade.
+  const [destravado, setDestravado] = useState(true);
   const trava = useRef<WakeLockSentinel | null>(null);
 
   useEffect(() => {
     setSom(somLigado());
     setPodeTravar("wakeLock" in navigator);
+    setDestravado(somDestravado());
+    return prepararSom(() => setDestravado(true));
   }, []);
 
   useEffect(() => {
@@ -237,6 +243,13 @@ function Controles() {
       >
         {som ? "Som ligado" : "Som desligado"}
       </button>
+      {som && !destravado && (
+        // O navegador só libera áudio depois do primeiro toque na página.
+        // Até lá o botão acima estaria mentindo: o apito ainda está mudo.
+        <span className="self-center text-xs font-semibold text-ouro">
+          Toque na tela pra liberar o apito
+        </span>
+      )}
       {podeTravar && (
         <button
           type="button"

@@ -19,6 +19,8 @@ type Enviado = { id: number; em: number };
 const DOZE_HORAS = 12 * 3600_000;
 /** Tempo que a folha leva pra descer antes de sumir da tela. */
 const SAIDA_FOLHA = 180;
+/** Menor nome aceito. O servidor exige o mesmo; aqui é só pra avisar antes. */
+const NOME_MINIMO = 2;
 const FINAIS: StatusPedido[] = ["CONCLUIDO", "CANCELADO"];
 
 const SITUACAO: Record<StatusPedido, { texto: string; cor: string }> = {
@@ -48,6 +50,10 @@ function gravar(chave: string, valor: unknown) {
   }
 }
 
+function nomeServe(n: string): boolean {
+  return n.trim().length >= NOME_MINIMO;
+}
+
 function menorPreco(p: Produto) {
   const variacoes = p.produto_variacoes ?? [];
   return variacoes.length
@@ -75,6 +81,8 @@ export function CardapioMesa({
 
   const [itens, setItens] = useState<ItemCarrinho[]>([]);
   const [nome, setNome] = useState("");
+  const [nomeConfirmado, setNomeConfirmado] = useState(false);
+  const [leuMemoria, setLeuMemoria] = useState(false);
   const [observacao, setObservacao] = useState("");
   const [escolhendo, setEscolhendo] = useState<Produto | null>(null);
   const [verCarrinho, setVerCarrinho] = useState(false);
@@ -91,7 +99,12 @@ export function CardapioMesa({
   // --- memória do celular -------------------------------------------------
   useEffect(() => {
     setItens(ler<ItemCarrinho[]>(chaveCarrinho, []));
-    setNome(ler("gb:nome", ""));
+    const guardado = ler("gb:nome", "");
+    setNome(guardado);
+    // O nome vale pelo turno: 12h depois, quem está nesta mesa é outra pessoa.
+    if (nomeServe(guardado) && Date.now() < ler<number>("gb:nome:vale-ate", 0))
+      setNomeConfirmado(true);
+    setLeuMemoria(true);
     carregou.current = true;
   }, [chaveCarrinho]);
 
@@ -220,8 +233,25 @@ export function CardapioMesa({
     );
   }
 
+  function lembrarNome(valor: string) {
+    gravar("gb:nome", valor);
+    gravar("gb:nome:vale-ate", Date.now() + DOZE_HORAS);
+  }
+
+  function confirmarNome() {
+    if (!nomeServe(nome)) return;
+    const limpo = nome.trim();
+    setNome(limpo);
+    lembrarNome(limpo);
+    setNomeConfirmado(true);
+  }
+
   function enviar() {
     setErro(null);
+    if (!nomeServe(nome)) {
+      setErro("Diga seu nome antes de enviar — é por ele que o atendente te acha.");
+      return;
+    }
     iniciar(async () => {
       try {
         const r = await enviarPedido(mesa.codigo, {
@@ -241,7 +271,7 @@ export function CardapioMesa({
         }
         const lista = ler<Enviado[]>(chaveEnviados, []);
         gravar(chaveEnviados, [{ id: r.pedido_id, em: Date.now() }, ...lista].slice(0, 20));
-        gravar("gb:nome", nome.trim());
+        lembrarNome(nome.trim());
         setItens([]);
         setObservacao("");
         fecharCarrinho();
@@ -257,6 +287,18 @@ export function CardapioMesa({
     // O cardápio é feito pra uma mão: no computador ele fica numa coluna
     // central em vez de esticar a linha do produto pela tela toda.
     <div className="mx-auto min-h-screen max-w-2xl bg-breu pb-32 text-creme">
+      {/* Antes do cardápio: quem é você? Sem isso o pedido chega sem dono na
+          tela do atendente. Só aparece depois de ler a memória do celular,
+          senão piscaria pra quem já disse o nome. */}
+      {leuMemoria && !nomeConfirmado && (
+        <PortaNome
+          mesa={mesa.numero}
+          nome={nome}
+          aoMudar={setNome}
+          aoEntrar={confirmarNome}
+        />
+      )}
+
       {/* topo com a curva laranja do cardápio impresso */}
       <header className="relative overflow-hidden bg-black px-5 pb-12 pt-6">
         <div className="flex items-start justify-between gap-4">
@@ -547,7 +589,7 @@ export function CardapioMesa({
             <div className="mt-7 space-y-4">
               <div>
                 <label className="rotulo" htmlFor="cliente-nome">
-                  Quem está pedindo? (opcional)
+                  Quem está pedindo?
                 </label>
                 <input
                   id="cliente-nome"
@@ -557,10 +599,11 @@ export function CardapioMesa({
                   value={nome}
                   onChange={(e) => setNome(e.target.value)}
                   placeholder="Ex.: Vinícius"
+                  aria-invalid={!nomeServe(nome)}
                 />
                 <p className="mt-1.5 text-xs text-creme-fraco">
-                  Só pra entregar na mão certa quando a mesa tem mais gente. A conta é
-                  uma só, da mesa.
+                  Passou o celular pra outra pessoa? Troque o nome aqui. A conta
+                  continua uma só, da mesa.
                 </p>
               </div>
               <div>
@@ -597,7 +640,7 @@ export function CardapioMesa({
             <button
               type="button"
               className="btn btn-ouro w-full py-4 text-base"
-              disabled={enviando || !lojaAberta || itens.length === 0}
+              disabled={enviando || !lojaAberta || itens.length === 0 || !nomeServe(nome)}
               onClick={enviar}
             >
               {enviando ? "Enviando…" : lojaAberta ? "Enviar pedido" : "Fechado agora"}
@@ -621,6 +664,82 @@ export function CardapioMesa({
 }
 
 /** Folha que sobe de baixo no celular e vira janela no computador. */
+/**
+ * Porta de entrada da mesa: o nome, antes de qualquer coisa.
+ *
+ * Cobre a tela inteira porque é obrigatório — mas o cardápio fica visível
+ * atrás, pra pessoa ver que chegou no lugar certo enquanto digita.
+ */
+function PortaNome({
+  mesa,
+  nome,
+  aoMudar,
+  aoEntrar,
+}: {
+  mesa: number;
+  nome: string;
+  aoMudar: (v: string) => void;
+  aoEntrar: () => void;
+}) {
+  const serve = nomeServe(nome);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="porta-nome-titulo"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-breu/95 px-5 backdrop-blur-sm"
+    >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          aoEntrar();
+        }}
+        className="anim-entrar w-full max-w-sm"
+      >
+        <Marca tamanho={1.5} alinhamento="centro" />
+
+        <span className="mx-auto mt-6 block w-fit rounded-full border border-ouro/60 bg-ouro/10 px-3.5 py-1.5 font-display text-sm font-bold uppercase tracking-wide text-ouro">
+          Mesa {mesa}
+        </span>
+
+        <h1
+          id="porta-nome-titulo"
+          className="mt-5 text-center font-display text-3xl font-extrabold uppercase leading-tight"
+        >
+          Qual é o seu nome?
+        </h1>
+        <p className="mt-2 text-center text-sm text-creme-suave">
+          É assim que o atendente sabe de quem é cada pedido quando a mesa tem
+          mais gente. A conta continua sendo uma só, da mesa.
+        </p>
+
+        <input
+          autoFocus
+          className="campo mt-6 text-center text-lg"
+          maxLength={40}
+          autoComplete="given-name"
+          enterKeyHint="go"
+          value={nome}
+          onChange={(e) => aoMudar(e.target.value)}
+          placeholder="Seu nome"
+          aria-label="Seu nome"
+        />
+
+        <button type="submit" disabled={!serve} className="btn btn-ouro mt-4 w-full py-3.5 text-base">
+          Ver o cardápio
+        </button>
+
+        {!serve && nome.trim().length > 0 && (
+          <p className="mt-2 text-center text-xs text-creme-fraco">
+            Escreva pelo menos {NOME_MINIMO} letras.
+          </p>
+        )}
+      </form>
+    </div>
+  );
+}
+
 function Folha({
   rotulo,
   aoFechar,
