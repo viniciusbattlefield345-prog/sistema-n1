@@ -79,7 +79,21 @@ export async function buscarCliente(telefone: string): Promise<ClienteConhecido 
   };
 }
 
-/** Cria ou atualiza o cadastro pelo telefone, que é a chave única da tabela. */
+/**
+ * Cria ou completa o cadastro pelo telefone, que é a chave única da tabela.
+ *
+ * Cadastro que já existe NÃO é sobrescrito daqui: este é um link público, e
+ * quem soubesse o número de outra pessoa poderia trocar o nome e o endereço
+ * dela no cadastro da loja. Só se preenche buraco — o que já está escrito
+ * fica. O endereço deste pedido vai gravado no próprio pedido, então a
+ * entrega sai certa de qualquer jeito.
+ *
+ * O efeito colateral: cliente que se muda continua com o endereço antigo
+ * voltando preenchido. Ele corrige na hora do pedido (e o pedido sai no
+ * lugar certo), mas quem arruma o cadastro de vez é a loja, na tela
+ * Clientes. Pra ele mesmo poder mudar, o telefone precisaria ser
+ * confirmado por SMS — aí sim dá pra confiar em quem está do outro lado.
+ */
 async function guardarCliente(
   sb: ReturnType<typeof clienteServico>,
   dados: DadosEntrega,
@@ -96,12 +110,21 @@ async function guardarCliente(
 
   const { data: existente } = await sb
     .from("clientes")
-    .select("id")
+    .select("id, nome, endereco, numero, bairro_id, referencia")
     .eq("telefone", tel)
     .maybeSingle();
 
   if (existente) {
-    await sb.from("clientes").update(campos).eq("id", existente.id);
+    const buracos: Record<string, unknown> = {};
+    if (!existente.nome?.trim()) buracos.nome = campos.nome;
+    if (!existente.endereco?.trim() && campos.endereco) buracos.endereco = campos.endereco;
+    if (!existente.numero?.trim() && campos.numero) buracos.numero = campos.numero;
+    if (existente.bairro_id === null && campos.bairro_id) buracos.bairro_id = campos.bairro_id;
+    if (!existente.referencia?.trim() && campos.referencia)
+      buracos.referencia = campos.referencia;
+
+    if (Object.keys(buracos).length > 0)
+      await sb.from("clientes").update(buracos).eq("id", existente.id);
     return existente.id;
   }
 
