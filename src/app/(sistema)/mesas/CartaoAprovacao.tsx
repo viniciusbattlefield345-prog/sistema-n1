@@ -2,7 +2,16 @@
 
 import { useState, useTransition } from "react";
 import { aprovarPedido, recusarPedido } from "./acoes";
-import { duracao, hora, minutosDesde, numeroPedido, reais, rotuloPedido } from "@/lib/formato";
+import {
+  duracao,
+  hora,
+  minutosDesde,
+  nomePagamento,
+  numeroPedido,
+  reais,
+  rotuloPedido,
+  telefone,
+} from "@/lib/formato";
 import type { Pedido } from "@/lib/tipos";
 
 const MOTIVOS = ["Item acabou", "Pedido repetido", "Cozinha fechando", "Fale com o atendente"];
@@ -60,6 +69,37 @@ export function CartaoAprovacao({
           {reais(Number(pedido.total))}
         </span>
       </header>
+
+      {/* Entrega e retirada: pra decidir, quem aprova precisa ver onde é, como
+          paga e quanto de troco levar. Pedido de mesa não tem nada disso. */}
+      {pedido.tipo !== "MESA" && (
+        <div className="mt-3 space-y-1 rounded-xl border border-borda bg-breu/60 px-3 py-2.5 text-sm">
+          {pedido.cliente_telefone && (
+            <a
+              href={`tel:${pedido.cliente_telefone}`}
+              className="block font-semibold text-ouro underline underline-offset-2"
+            >
+              {telefone(pedido.cliente_telefone)}
+            </a>
+          )}
+          {pedido.tipo === "ENTREGA" && pedido.endereco_entrega && (
+            <p className="leading-snug text-creme-suave">{pedido.endereco_entrega}</p>
+          )}
+          <p className="text-creme-suave">
+            {pedido.forma_pagamento
+              ? nomePagamento(pedido.forma_pagamento)
+              : "Pagamento a combinar"}
+            {Number(pedido.taxa_entrega) > 0 &&
+              ` · entrega ${reais(Number(pedido.taxa_entrega))}`}
+            {pedido.forma_pagamento === "Dinheiro" && Number(pedido.troco_para) > 0 && (
+              <span className="font-semibold text-preparo">
+                {" "}
+                · troco pra {reais(Number(pedido.troco_para))}
+              </span>
+            )}
+          </p>
+        </div>
+      )}
 
       <ul className="mt-3 space-y-1.5 border-t border-borda pt-3 text-sm">
         {(pedido.itens_pedido ?? []).map((item) => (

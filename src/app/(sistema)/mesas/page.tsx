@@ -24,10 +24,12 @@ export default async function PaginaMesas() {
   ] = await Promise.all([
     supabase.from("mesas").select("id, numero").eq("ativo", true).order("numero"),
     supabase.from("comandas").select("id, mesa_id, total, aberta_em").eq("status", "ABERTA"),
+    // Só pedido de mesa: o que vem pelo link de delivery tem tela própria.
     supabase
       .from("pedidos")
       .select("*, mesas(numero), itens_pedido(*, item_adicionais(*))")
       .eq("status", "AGUARDANDO")
+      .eq("tipo", "MESA")
       .order("criado_em"),
     supabase.from("caixas").select("id").eq("status", "ABERTO").maybeSingle(),
     supabase.from("perfis").select("papel").eq("id", user!.id).single(),

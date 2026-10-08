@@ -19,7 +19,7 @@ async function sessao() {
 }
 
 function atualizarTelas() {
-  for (const tela of ["/mesas", "/cozinha", "/pedidos", "/caixa", "/impressao"]) {
+  for (const tela of ["/mesas", "/entregas", "/cozinha", "/pedidos", "/caixa", "/impressao"]) {
     revalidatePath(tela);
   }
   revalidatePath("/mesas/[id]", "page");

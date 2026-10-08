@@ -24,6 +24,7 @@ const Icone = ({ d }: { d: string }) => (
 
 const I = {
   mesas: "M3 9h18M5 9v11M19 9v11M8 9V5h8v4M9 14h6",
+  entregas: "M3 7h10v8H3zM13 10h4l3 3v2h-7zM7.5 17.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0ZM18.5 17.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z",
   pdv: "M3 6h18M3 6l1.5 12h15L21 6M9 11v4M15 11v4",
   cozinha: "M6 3v8a3 3 0 0 0 6 0V3M9 11v10M15 3c-1.5 1.5-2 3-2 5s.5 3 2 3v10",
   pedidos: "M7 3h10a1 1 0 0 1 1 1v17l-3-2-3 2-3-2-3 2V4a1 1 0 0 1 1-1ZM9 8h6M9 12h6",
@@ -50,6 +51,7 @@ type Item = {
 
 const VENDAS: Item[] = [
   { href: "/mesas", rotulo: "Mesas", icone: I.mesas },
+  { href: "/entregas", rotulo: "Entregas", icone: I.entregas },
   { href: "/pdv", rotulo: "Novo pedido", icone: I.pdv },
   { href: "/cozinha", rotulo: "Cozinha", icone: I.cozinha },
   { href: "/pedidos", rotulo: "Pedidos", icone: I.pedidos },

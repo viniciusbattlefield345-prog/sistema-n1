@@ -81,11 +81,15 @@ export function Moldura({
 }
 
 /**
- * Pedido do QR esperando aprovação, em qualquer tela: o atendente pode
- * estar no PDV ou no caixa quando o cliente pede. Apita quando a conta sobe.
+ * Pedido esperando aprovação, em qualquer tela: o atendente pode estar no PDV
+ * ou no caixa quando o cliente pede. Apita quando a conta sobe.
+ *
+ * Mesa e delivery são contados separados porque moram em telas diferentes —
+ * um aviso que leva pro lugar errado é pior do que aviso nenhum.
  */
 function AvisoAguardando() {
-  const [quantidade, setQuantidade] = useState(0);
+  const [mesa, setMesa] = useState(0);
+  const [entrega, setEntrega] = useState(0);
   const anterior = useRef<number | null>(null);
   const caminho = usePathname();
 
@@ -95,14 +99,18 @@ function AvisoAguardando() {
     let vivo = true;
 
     async function contar() {
-      const { count } = await supabase
+      const { data } = await supabase
         .from("pedidos")
-        .select("id", { count: "exact", head: true })
+        .select("tipo")
         .eq("status", "AGUARDANDO");
-      if (!vivo || count === null) return;
-      if (anterior.current !== null && count > anterior.current) apitar();
-      anterior.current = count;
-      setQuantidade(count);
+      if (!vivo || !data) return;
+
+      const deMesa = data.filter((p) => p.tipo === "MESA").length;
+      const total = data.length;
+      if (anterior.current !== null && total > anterior.current) apitar();
+      anterior.current = total;
+      setMesa(deMesa);
+      setEntrega(total - deMesa);
     }
 
     void contar();
@@ -127,18 +135,33 @@ function AvisoAguardando() {
     };
   }, []);
 
-  if (quantidade === 0 || caminho === "/mesas") return null;
+  // Na própria tela do assunto o selo é ruído: a lista já está logo abaixo.
+  const avisos = [
+    caminho === "/mesas" || mesa === 0
+      ? null
+      : { href: "/mesas", texto: `${mesa} na mesa`, chave: "mesa" },
+    caminho === "/entregas" || entrega === 0
+      ? null
+      : { href: "/entregas", texto: `${entrega} no delivery`, chave: "entrega" },
+  ].filter((a) => a !== null);
+
+  if (avisos.length === 0) return null;
 
   return (
-    <Link
-      href="/mesas"
-      className="nao-imprimir fixed right-3 top-[4.25rem] z-[45] flex items-center gap-2 rounded-full bg-ouro px-4 py-2.5 text-sm font-bold text-black shadow-lg shadow-black/60 lg:top-4"
-    >
-      <span className="relative flex size-2.5">
-        <span className="absolute inline-flex size-full animate-ping rounded-full bg-black opacity-60" />
-        <span className="relative inline-flex size-2.5 rounded-full bg-black" />
-      </span>
-      {quantidade} {quantidade === 1 ? "pedido esperando" : "pedidos esperando"}
-    </Link>
+    <div className="nao-imprimir fixed right-3 top-[4.25rem] z-[45] flex flex-col items-end gap-2 lg:top-4">
+      {avisos.map((a) => (
+        <Link
+          key={a.chave}
+          href={a.href}
+          className="flex items-center gap-2 rounded-full bg-ouro px-4 py-2.5 text-sm font-bold text-black shadow-lg shadow-black/60"
+        >
+          <span className="relative flex size-2.5">
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-black opacity-60" />
+            <span className="relative inline-flex size-2.5 rounded-full bg-black" />
+          </span>
+          {a.texto} esperando
+        </Link>
+      ))}
+    </div>
   );
 }

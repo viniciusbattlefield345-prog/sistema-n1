@@ -7,59 +7,81 @@ import { Folha, SAIDA_FOLHA } from "@/components/cardapio/Folha";
 import { ItensCarrinho } from "@/components/cardapio/ItensCarrinho";
 import { ListaCardapio } from "@/components/cardapio/ListaCardapio";
 import { MeusPedidos } from "@/components/cardapio/MeusPedidos";
-import { consultarPedidos, enviarPedido, type SituacaoPedido } from "./acoes";
-import { numeroPedido, reais, subtotalCarrinho } from "@/lib/formato";
+import { PortaEntrega } from "./PortaEntrega";
+import { consultarPedidosEntrega, enviarPedidoEntrega, type SituacaoEntrega } from "./acoes";
+import {
+  CLIENTE_VAZIO,
+  dadosServem,
+  type BairroAtendido,
+  type DadosCliente,
+} from "./dados";
+import {
+  FORMAS_PAGAMENTO,
+  nomePagamento,
+  numeroPedido,
+  paraNumero,
+  reais,
+  subtotalCarrinho,
+  telefone as formatarTelefone,
+} from "@/lib/formato";
 import { gravar, ler } from "@/lib/memoria";
-import type { Adicional, Categoria, ItemCarrinho, Produto, StatusPedido } from "@/lib/tipos";
-
-/**
- * Cardápio do cliente, aberto pelo QR da mesa.
- *
- * O carrinho e a lista de pedidos enviados ficam guardados no próprio
- * celular: recarregar a página ou bloquear a tela não perde nada. Preço
- * guardado aqui é só pra mostrar — quem soma de verdade é o servidor.
- */
+import type {
+  Adicional,
+  Categoria,
+  FormaPagamento,
+  ItemCarrinho,
+  Produto,
+  StatusPedido,
+} from "@/lib/tipos";
 
 type Enviado = { id: number; em: number };
 
 const DOZE_HORAS = 12 * 3600_000;
-/** Menor nome aceito. O servidor exige o mesmo; aqui é só pra avisar antes. */
-const NOME_MINIMO = 2;
 const FINAIS: StatusPedido[] = ["CONCLUIDO", "CANCELADO"];
 
-function nomeServe(n: string): boolean {
-  return n.trim().length >= NOME_MINIMO;
-}
+const CHAVE_CLIENTE = "gb:entrega:cliente";
+const CHAVE_CARRINHO = "gb:entrega:carrinho";
+const CHAVE_ENVIADOS = "gb:entrega:pedidos";
 
-export function CardapioMesa({
-  mesa,
+/**
+ * O cardápio do link público de delivery.
+ *
+ * Mesma lista e mesma folha de produto da mesa — o que muda é a porta de
+ * entrada (quem é você, e pra onde vai) e o fechamento (taxa do bairro,
+ * forma de pagamento e troco).
+ */
+export function CardapioEntrega({
   lojaAberta,
   categorias,
   produtos,
   adicionais,
+  bairros,
   instagram,
+  telefoneLoja,
 }: {
-  mesa: { numero: number; codigo: string };
   lojaAberta: boolean;
   categorias: Categoria[];
   produtos: Produto[];
   adicionais: Adicional[];
+  bairros: BairroAtendido[];
   instagram: string;
+  telefoneLoja: string;
 }) {
-  const chaveCarrinho = `gb:carrinho:${mesa.codigo}`;
-  const chaveEnviados = `gb:pedidos:${mesa.codigo}`;
+  const [cliente, setCliente] = useState<DadosCliente>(CLIENTE_VAZIO);
+  const [entrou, setEntrou] = useState(false);
+  const [leuMemoria, setLeuMemoria] = useState(false);
 
   const [itens, setItens] = useState<ItemCarrinho[]>([]);
-  const [nome, setNome] = useState("");
-  const [nomeConfirmado, setNomeConfirmado] = useState(false);
-  const [leuMemoria, setLeuMemoria] = useState(false);
+  const [pagamento, setPagamento] = useState<FormaPagamento>("Dinheiro");
+  const [trocoPara, setTrocoPara] = useState("");
   const [observacao, setObservacao] = useState("");
+
   const [escolhendo, setEscolhendo] = useState<Produto | null>(null);
   const [verCarrinho, setVerCarrinho] = useState(false);
+  const [saindo, setSaindo] = useState<"carrinho" | "escolha" | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [confirmado, setConfirmado] = useState<number | null>(null);
-  const [meus, setMeus] = useState<SituacaoPedido[]>([]);
-  const [saindo, setSaindo] = useState<"carrinho" | "escolha" | null>(null);
+  const [meus, setMeus] = useState<SituacaoEntrega[]>([]);
   const [enviando, iniciar] = useTransition();
 
   const carregou = useRef(false);
@@ -67,39 +89,41 @@ export function CardapioMesa({
 
   // --- memória do celular -------------------------------------------------
   useEffect(() => {
-    setItens(ler<ItemCarrinho[]>(chaveCarrinho, []));
-    const guardado = ler("gb:nome", "");
-    setNome(guardado);
-    // O nome vale pelo turno: 12h depois, quem está nesta mesa é outra pessoa.
-    if (nomeServe(guardado) && Date.now() < ler<number>("gb:nome:vale-ate", 0))
-      setNomeConfirmado(true);
+    setItens(ler<ItemCarrinho[]>(CHAVE_CARRINHO, []));
+    const guardado = ler<DadosCliente | null>(CHAVE_CLIENTE, null);
+    if (guardado && dadosServem(guardado)) {
+      setCliente(guardado);
+      setEntrou(true);
+    }
     setLeuMemoria(true);
     carregou.current = true;
-  }, [chaveCarrinho]);
+  }, []);
 
   useEffect(() => {
-    if (carregou.current) gravar(chaveCarrinho, itens);
-  }, [itens, chaveCarrinho]);
+    if (carregou.current) gravar(CHAVE_CARRINHO, itens);
+  }, [itens]);
 
   // --- andamento dos pedidos já enviados ---------------------------------
   const atualizar = useCallback(async () => {
-    const lista = ler<Enviado[]>(chaveEnviados, []).filter(
-      (e) => Date.now() - e.em < DOZE_HORAS,
-    );
-    gravar(chaveEnviados, lista);
+    if (!cliente.telefone) return;
+    const lista = ler<Enviado[]>(CHAVE_ENVIADOS, []).filter((e) => Date.now() - e.em < DOZE_HORAS);
+    gravar(CHAVE_ENVIADOS, lista);
     if (lista.length === 0) {
       setMeus([]);
       temPendente.current = false;
       return;
     }
     try {
-      const situacao = await consultarPedidos(mesa.codigo, lista.map((e) => e.id));
+      const situacao = await consultarPedidosEntrega(
+        cliente.telefone,
+        lista.map((e) => e.id),
+      );
       setMeus(situacao);
       temPendente.current = situacao.some((p) => !FINAIS.includes(p.status));
     } catch {
       // sem sinal agora: tenta de novo no próximo ciclo
     }
-  }, [chaveEnviados, mesa.codigo]);
+  }, [cliente.telefone]);
 
   useEffect(() => {
     void atualizar();
@@ -116,10 +140,22 @@ export function CardapioMesa({
     };
   }, [atualizar]);
 
-  const quantidadeItens = itens.reduce((s, i) => s + i.quantidade, 0);
+  const ehEntrega = cliente.tipo === "ENTREGA";
+  const bairro = bairros.find((b) => b.id === cliente.bairro_id) ?? null;
+  const taxa = ehEntrega && bairro ? Number(bairro.taxa) : 0;
   const subtotal = subtotalCarrinho(itens);
+  const total = subtotal + taxa;
+  const quantidadeItens = itens.reduce((s, i) => s + i.quantidade, 0);
 
-  /* Fechar é em dois tempos: a folha desce, e só então sai da tela. */
+  const troco = paraNumero(trocoPara);
+  const trocoCurto = pagamento === "Dinheiro" && troco > 0 && troco < total;
+
+  function entrar(d: DadosCliente) {
+    setCliente(d);
+    gravar(CHAVE_CLIENTE, d);
+    setEntrou(true);
+  }
+
   function fecharCarrinho() {
     setSaindo("carrinho");
     setTimeout(() => {
@@ -153,29 +189,22 @@ export function CardapioMesa({
     );
   }
 
-  function lembrarNome(valor: string) {
-    gravar("gb:nome", valor);
-    gravar("gb:nome:vale-ate", Date.now() + DOZE_HORAS);
-  }
-
-  function confirmarNome() {
-    if (!nomeServe(nome)) return;
-    const limpo = nome.trim();
-    setNome(limpo);
-    lembrarNome(limpo);
-    setNomeConfirmado(true);
-  }
-
   function enviar() {
     setErro(null);
-    if (!nomeServe(nome)) {
-      setErro("Diga seu nome antes de enviar — é por ele que o atendente te acha.");
+    if (!dadosServem(cliente)) {
+      setErro("Faltou algum dado seu. Toque em “Meus dados” pra completar.");
+      return;
+    }
+    if (trocoCurto) {
+      setErro("O troco não pode ser menor que o total do pedido.");
       return;
     }
     iniciar(async () => {
       try {
-        const r = await enviarPedido(mesa.codigo, {
-          nome,
+        const r = await enviarPedidoEntrega({
+          ...cliente,
+          forma_pagamento: pagamento,
+          troco_para: pagamento === "Dinheiro" && troco > 0 ? troco : null,
           observacao,
           itens: itens.map((i) => ({
             produto_id: i.produto_id,
@@ -189,11 +218,12 @@ export function CardapioMesa({
           setErro(r.erro);
           return;
         }
-        const lista = ler<Enviado[]>(chaveEnviados, []);
-        gravar(chaveEnviados, [{ id: r.pedido_id, em: Date.now() }, ...lista].slice(0, 20));
-        lembrarNome(nome.trim());
+        const lista = ler<Enviado[]>(CHAVE_ENVIADOS, []);
+        gravar(CHAVE_ENVIADOS, [{ id: r.pedido_id, em: Date.now() }, ...lista].slice(0, 20));
+        gravar(CHAVE_CLIENTE, cliente);
         setItens([]);
         setObservacao("");
+        setTrocoPara("");
         fecharCarrinho();
         setConfirmado(r.numero_dia ?? 0);
         void atualizar();
@@ -204,25 +234,19 @@ export function CardapioMesa({
   }
 
   return (
-    // O cardápio é feito pra uma mão: no computador ele fica numa coluna
-    // central em vez de esticar a linha do produto pela tela toda.
     <div className="mx-auto min-h-screen max-w-2xl bg-breu pb-32 text-creme">
-      {/* Antes do cardápio: quem é você? Sem isso o pedido chega sem dono na
-          tela do atendente. Só aparece depois de ler a memória do celular,
-          senão piscaria pra quem já disse o nome. */}
-      {leuMemoria && !nomeConfirmado && (
-        <PortaNome mesa={mesa.numero} nome={nome} aoMudar={setNome} aoEntrar={confirmarNome} />
+      {leuMemoria && !entrou && (
+        <PortaEntrega bairros={bairros} inicial={cliente} aoEntrar={entrar} />
       )}
 
-      {/* topo com a curva laranja do cardápio impresso */}
       <header className="relative overflow-hidden bg-black px-5 pb-12 pt-6">
         <div className="flex items-start justify-between gap-4">
           <Marca tamanho={1.4} alinhamento="esquerda" />
           <span className="shrink-0 whitespace-nowrap rounded-full border border-ouro/60 bg-ouro/10 px-3.5 py-1.5 font-display text-sm font-bold uppercase tracking-wide text-ouro">
-            Mesa {mesa.numero}
+            {ehEntrega ? "Entrega" : "Retirada"}
           </span>
         </div>
-        <p className="mt-6 font-script text-6xl leading-none text-creme">Cardápio</p>
+        <p className="mt-6 font-script text-6xl leading-none text-creme">Delivery</p>
         <p className="mt-3 max-w-xs text-sm text-creme-suave">
           Escolha, envie e acompanhe seu pedido daqui mesmo.
         </p>
@@ -243,8 +267,28 @@ export function CardapioMesa({
           className="mx-4 mt-2 rounded-2xl border border-cancelado/40 bg-cancelado/10 px-4 py-3 text-sm text-cancelado"
         >
           <strong className="block">Estamos fechados agora.</strong>
-          Dá pra olhar o cardápio; os pedidos abrem junto com o caixa.
+          Dá pra olhar o cardápio; os pedidos abrem quando a loja abre.
         </div>
+      )}
+
+      {entrou && (
+        <section className="mx-4 mt-3 flex items-start justify-between gap-3 rounded-2xl border border-borda bg-carvao px-4 py-3">
+          <div className="min-w-0 text-sm">
+            <p className="font-semibold">{cliente.nome}</p>
+            <p className="truncate text-xs text-creme-suave">
+              {ehEntrega
+                ? `${cliente.endereco}${cliente.numero ? `, ${cliente.numero}` : ""}${bairro ? ` — ${bairro.nome}` : ""}`
+                : "Retirada na loja"}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setEntrou(false)}
+            className="shrink-0 text-xs text-creme-suave underline underline-offset-2"
+          >
+            Meus dados
+          </button>
+        </section>
       )}
 
       <MeusPedidos pedidos={meus} />
@@ -254,12 +298,11 @@ export function CardapioMesa({
 
         <footer className="py-12 text-center text-xs leading-relaxed text-creme-fraco">
           {instagram && <p className="mb-1 text-creme-suave">{instagram}</p>}
-          <p>O atendente confirma cada pedido antes de ir pra cozinha.</p>
-          <p>Você paga no fim, na conta da mesa.</p>
+          {telefoneLoja && <p className="mb-1">{formatarTelefone(telefoneLoja)}</p>}
+          <p>A loja confirma seu pedido antes de começar a preparar.</p>
         </footer>
       </main>
 
-      {/* pedido enviado */}
       {confirmado !== null && itens.length === 0 && (
         <div className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-2xl px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <div
@@ -270,7 +313,7 @@ export function CardapioMesa({
               Pedido {numeroPedido(confirmado)} enviado!
             </p>
             <p className="mt-1 text-sm text-creme-suave">
-              Assim que o atendente confirmar, ele vai pra cozinha. Acompanhe em “Seus pedidos”, lá em cima.
+              A loja vai confirmar em instantes. Acompanhe em “Seus pedidos”, lá em cima.
             </p>
             <button
               type="button"
@@ -283,7 +326,6 @@ export function CardapioMesa({
         </div>
       )}
 
-      {/* barra do carrinho */}
       {itens.length > 0 && !verCarrinho && (
         <div className="anim-barra fixed inset-x-0 bottom-0 z-40 mx-auto max-w-2xl bg-gradient-to-t from-breu via-breu/95 to-transparent px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-8">
           <button
@@ -293,7 +335,6 @@ export function CardapioMesa({
           >
             <span>
               Ver pedido ·{" "}
-              {/* a key troca a cada item: é o que faz o número pular de novo */}
               <span key={quantidadeItens} className="anim-pulo inline-block">
                 {quantidadeItens}
               </span>{" "}
@@ -308,7 +349,7 @@ export function CardapioMesa({
         <Folha rotulo="Seu pedido" saindo={saindo === "carrinho"} aoFechar={fecharCarrinho}>
           <header className="flex items-center justify-between gap-3 border-b border-borda px-5 py-4">
             <h2 className="font-display text-lg font-extrabold uppercase">
-              Seu pedido · Mesa {mesa.numero}
+              Seu pedido · {ehEntrega ? "Entrega" : "Retirada"}
             </h2>
             <button
               type="button"
@@ -327,36 +368,63 @@ export function CardapioMesa({
             />
 
             <div className="mt-7 space-y-4">
+              <fieldset>
+                <legend className="rotulo">Como você vai pagar?</legend>
+                <div className="grid grid-cols-2 gap-2">
+                  {FORMAS_PAGAMENTO.map((f) => (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => setPagamento(f)}
+                      aria-pressed={pagamento === f}
+                      className={
+                        "rounded-xl border px-3 py-2.5 text-sm font-semibold transition-colors " +
+                        (pagamento === f
+                          ? "border-ouro bg-ouro/15 text-ouro"
+                          : "border-borda text-creme-suave")
+                      }
+                    >
+                      {nomePagamento(f)}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+
+              {pagamento === "Dinheiro" && (
+                <div>
+                  <label className="rotulo" htmlFor="entrega-troco">
+                    Precisa de troco pra quanto? (opcional)
+                  </label>
+                  <input
+                    id="entrega-troco"
+                    className="campo"
+                    inputMode="decimal"
+                    value={trocoPara}
+                    onChange={(e) => setTrocoPara(e.target.value)}
+                    placeholder="Ex.: 50,00"
+                    aria-invalid={trocoCurto}
+                  />
+                  <p className="mt-1.5 text-xs text-creme-fraco">
+                    {trocoCurto
+                      ? "Esse valor é menor que o total do pedido."
+                      : troco > 0
+                        ? `Levamos ${reais(Math.max(troco - total, 0))} de troco.`
+                        : "Deixe em branco se tiver o valor certo."}
+                  </p>
+                </div>
+              )}
+
               <div>
-                <label className="rotulo" htmlFor="cliente-nome">
-                  Quem está pedindo?
-                </label>
-                <input
-                  id="cliente-nome"
-                  className="campo"
-                  maxLength={40}
-                  autoComplete="given-name"
-                  value={nome}
-                  onChange={(e) => setNome(e.target.value)}
-                  placeholder="Ex.: Vinícius"
-                  aria-invalid={!nomeServe(nome)}
-                />
-                <p className="mt-1.5 text-xs text-creme-fraco">
-                  Passou o celular pra outra pessoa? Troque o nome aqui. A conta
-                  continua uma só, da mesa.
-                </p>
-              </div>
-              <div>
-                <label className="rotulo" htmlFor="pedido-obs">
+                <label className="rotulo" htmlFor="entrega-obs">
                   Observação do pedido (opcional)
                 </label>
                 <input
-                  id="pedido-obs"
+                  id="entrega-obs"
                   className="campo"
                   maxLength={200}
                   value={observacao}
                   onChange={(e) => setObservacao(e.target.value)}
-                  placeholder="Ex.: trazer tudo junto"
+                  placeholder="Ex.: interfone quebrado, ligar ao chegar"
                 />
               </div>
             </div>
@@ -371,16 +439,32 @@ export function CardapioMesa({
                 {erro}
               </p>
             )}
-            <div className="mb-3 flex items-baseline justify-between">
-              <span className="text-sm text-creme-suave">Total</span>
-              <span className="tabular font-display text-2xl font-extrabold text-ouro">
-                {reais(subtotal)}
-              </span>
-            </div>
+
+            <dl className="mb-3 space-y-1 text-sm">
+              <div className="flex justify-between">
+                <dt className="text-creme-suave">Itens</dt>
+                <dd className="tabular">{reais(subtotal)}</dd>
+              </div>
+              {ehEntrega && (
+                <div className="flex justify-between">
+                  <dt className="text-creme-suave">
+                    Entrega{bairro ? ` · ${bairro.nome}` : ""}
+                  </dt>
+                  <dd className="tabular">{taxa > 0 ? reais(taxa) : "Grátis"}</dd>
+                </div>
+              )}
+              <div className="flex items-baseline justify-between pt-1">
+                <dt className="text-sm text-creme-suave">Total</dt>
+                <dd className="tabular font-display text-2xl font-extrabold text-ouro">
+                  {reais(total)}
+                </dd>
+              </div>
+            </dl>
+
             <button
               type="button"
               className="btn btn-ouro w-full py-4 text-base"
-              disabled={enviando || !lojaAberta || itens.length === 0 || !nomeServe(nome)}
+              disabled={enviando || !lojaAberta || itens.length === 0 || !dadosServem(cliente)}
               onClick={enviar}
             >
               {enviando ? "Enviando…" : lojaAberta ? "Enviar pedido" : "Fechado agora"}
@@ -399,82 +483,6 @@ export function CardapioMesa({
           aoAdicionar={adicionar}
         />
       )}
-    </div>
-  );
-}
-
-/**
- * Porta de entrada da mesa: o nome, antes de qualquer coisa.
- *
- * Cobre a tela inteira porque é obrigatório — mas o cardápio fica visível
- * atrás, pra pessoa ver que chegou no lugar certo enquanto digita.
- */
-function PortaNome({
-  mesa,
-  nome,
-  aoMudar,
-  aoEntrar,
-}: {
-  mesa: number;
-  nome: string;
-  aoMudar: (v: string) => void;
-  aoEntrar: () => void;
-}) {
-  const serve = nomeServe(nome);
-
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="porta-nome-titulo"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-breu/95 px-5 backdrop-blur-sm"
-    >
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          aoEntrar();
-        }}
-        className="anim-entrar w-full max-w-sm"
-      >
-        <Marca tamanho={1.5} alinhamento="centro" />
-
-        <span className="mx-auto mt-6 block w-fit rounded-full border border-ouro/60 bg-ouro/10 px-3.5 py-1.5 font-display text-sm font-bold uppercase tracking-wide text-ouro">
-          Mesa {mesa}
-        </span>
-
-        <h1
-          id="porta-nome-titulo"
-          className="mt-5 text-center font-display text-3xl font-extrabold uppercase leading-tight"
-        >
-          Qual é o seu nome?
-        </h1>
-        <p className="mt-2 text-center text-sm text-creme-suave">
-          É assim que o atendente sabe de quem é cada pedido quando a mesa tem
-          mais gente. A conta continua sendo uma só, da mesa.
-        </p>
-
-        <input
-          autoFocus
-          className="campo mt-6 text-center text-lg"
-          maxLength={40}
-          autoComplete="given-name"
-          enterKeyHint="go"
-          value={nome}
-          onChange={(e) => aoMudar(e.target.value)}
-          placeholder="Seu nome"
-          aria-label="Seu nome"
-        />
-
-        <button type="submit" disabled={!serve} className="btn btn-ouro mt-4 w-full py-3.5 text-base">
-          Ver o cardápio
-        </button>
-
-        {!serve && nome.trim().length > 0 && (
-          <p className="mt-2 text-center text-xs text-creme-fraco">
-            Escreva pelo menos {NOME_MINIMO} letras.
-          </p>
-        )}
-      </form>
     </div>
   );
 }

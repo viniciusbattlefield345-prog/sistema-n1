@@ -5,11 +5,14 @@ import { NextResponse, type NextRequest } from "next/server";
 const PUBLICAS = ["/login", "/auth"];
 
 /**
- * Nem sessão precisam: o cardápio que o cliente abre pelo QR da mesa, e as
- * imagens geradas (ícone e prévia do WhatsApp, que o robô do WhatsApp busca
- * sem estar logado).
+ * Nem sessão precisam: o cardápio que o cliente abre pelo QR da mesa, o link
+ * público de delivery, e as imagens geradas (ícone e prévia do WhatsApp, que
+ * o robô do WhatsApp busca sem estar logado).
+ *
+ * Essas rotas conversam com o banco pela chave de serviço, no servidor, e
+ * conferem tudo por conta própria — é lá que mora a segurança delas.
  */
-const SEM_SESSAO = ["/m/", "/icon", "/apple-icon", "/opengraph-image"];
+const SEM_SESSAO = ["/m/", "/pedir", "/icon", "/apple-icon", "/opengraph-image"];
 
 export async function proxy(request: NextRequest) {
   const caminho = request.nextUrl.pathname;

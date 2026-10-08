@@ -127,7 +127,8 @@ export async function salvarPedido(dados: PedidoEnviado): Promise<Resultado> {
 
   await mandarImprimir(supabase, { tipo: "PEDIDO", pedido_id: resultado.id }, user.id);
 
-  for (const tela of ["/cozinha", "/pedidos", "/mesas", "/impressao"]) revalidatePath(tela);
+  for (const tela of ["/cozinha", "/pedidos", "/mesas", "/entregas", "/impressao"])
+    revalidatePath(tela);
   return {
     ok: true,
     pedido_id: resultado.id,
