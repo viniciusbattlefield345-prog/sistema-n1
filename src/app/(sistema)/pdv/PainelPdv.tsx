@@ -199,9 +199,19 @@ export function PainelPdv({
   const troco = Math.max(Number(trocoTexto.replace(",", ".") || 0) - total, 0);
 
   function escolherProduto(produto: Produto) {
+    /**
+     * Produto sem nada pra escolher cai direto na comanda com um toque — e
+     * isso e bom, e o que faz o balcao ser rapido.
+     *
+     * Mas pizza nao tem tamanho nem adicional cadastrado, e mesmo assim TEM
+     * escolha: a outra metade. Sem esta linha o atendente tocava na pizza e
+     * ela caia inteira na comanda, sem nunca perguntar o segundo sabor.
+     */
+    const categoria = categorias.find((c) => c.id === produto.categoria_id) ?? null;
     const temEscolha =
       (produto.produto_variacoes?.length ?? 0) > 0 ||
-      (produto.produto_adicionais?.length ?? 0) > 0;
+      (produto.produto_adicionais?.length ?? 0) > 0 ||
+      Boolean(categoria?.meio_a_meio);
 
     if (temEscolha) {
       setProdutoAberto(produto);
