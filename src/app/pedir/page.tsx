@@ -40,7 +40,7 @@ export default async function PaginaPedir() {
     sb
       .from("produtos")
       .select(
-        "id, categoria_id, nome, descricao, foto_url, preco_base, ativo, disponivel, ordem, produto_variacoes(*), produto_adicionais(adicional_id, preco)",
+        "id, categoria_id, nome, descricao, fatias, foto_url, preco_base, ativo, disponivel, ordem, produto_variacoes(*), produto_adicionais(adicional_id, preco)",
       )
       .eq("ativo", true)
       .order("ordem")

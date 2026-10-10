@@ -55,6 +55,7 @@ export function FormularioProduto({
       ? numero(Number(produto.preco_base))
       : "",
   );
+  const [fatias, setFatias] = useState(produto?.fatias ? String(produto.fatias) : "");
   const [ordem, setOrdem] = useState(String(produto?.ordem ?? 0));
   const [tamanhos, setTamanhos] = useState<Tamanho[]>(
     (produto?.produto_variacoes ?? []).map((v) => ({
@@ -109,6 +110,7 @@ export function FormularioProduto({
       categoria_id: categoriaId,
       nome,
       descricao,
+      fatias: fatias ? Number(fatias) : null,
       foto_url: fotoUrl,
       preco_base: paraNumero(precoBase),
       ativo: produto?.ativo ?? true,
@@ -306,6 +308,25 @@ export function FormularioProduto({
               />
             </div>
           )}
+
+          {/* Fatias: so a pizza responde isso, entao o campo fica opcional e
+              fora do caminho de quem cadastra um lanche. */}
+          <div className="w-52">
+            <label className="rotulo" htmlFor="p-fatias">
+              Fatias <span className="font-normal text-creme-fraco">(pizza)</span>
+            </label>
+            <select
+              id="p-fatias"
+              className="campo"
+              value={fatias}
+              onChange={(e) => setFatias(e.target.value)}
+            >
+              <option value="">Não se aplica</option>
+              <option value="8">8 fatias</option>
+              <option value="10">10 fatias</option>
+              <option value="12">12 fatias</option>
+            </select>
+          </div>
 
           {/* adicionais que o produto aceita */}
           {adicionais.length > 0 && (

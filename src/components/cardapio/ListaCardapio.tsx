@@ -153,6 +153,11 @@ export function ListaCardapio({
                     {p.descricao && (
                       <p className="mt-1 text-sm leading-snug text-creme-suave">{p.descricao}</p>
                     )}
+                    {p.fatias ? (
+                      <p className="mt-1 text-xs font-semibold text-ouro/80">
+                        {p.fatias} fatias
+                      </p>
+                    ) : null}
                     <p className="tabular mt-1.5 font-display font-bold text-creme">
                       {(p.produto_variacoes?.length ?? 0) > 0 && (
                         <span className="mr-1 text-xs font-normal text-creme-fraco">

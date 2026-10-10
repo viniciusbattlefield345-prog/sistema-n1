@@ -60,6 +60,8 @@ export interface Produto {
   categoria_id: number | null;
   nome: string;
   descricao: string | null;
+  /** Pizza: em quantos pedacos ela vem cortada. Null no que nao se fatia. */
+  fatias?: number | null;
   foto_url: string | null;
   preco_base: number;
   custo?: number | null;

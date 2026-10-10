@@ -10,6 +10,8 @@ export interface DadosProduto {
   categoria_id: number | null;
   nome: string;
   descricao: string;
+  /** Pizza: em quantos pedacos ela vem. Null = nao se aplica. */
+  fatias: number | null;
   foto_url: string | null;
   preco_base: number;
   ativo: boolean;
@@ -43,6 +45,7 @@ export async function salvarProduto(dados: DadosProduto): Promise<Resultado> {
     categoria_id: dados.categoria_id,
     nome,
     descricao: dados.descricao.trim() || null,
+    fatias: dados.fatias,
     foto_url: dados.foto_url || null,
     // Com tamanhos, o preço base vira o menor deles: é o "a partir de" do card.
     preco_base: variacoes.length

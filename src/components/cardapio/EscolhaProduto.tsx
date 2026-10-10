@@ -71,6 +71,11 @@ export function EscolhaProduto({
           {produto.descricao && (
             <p className="mt-2 text-sm leading-relaxed text-creme-suave">{produto.descricao}</p>
           )}
+          {produto.fatias ? (
+            <p className="mt-2 text-sm font-semibold text-ouro/80">
+              Vem cortada em {produto.fatias} fatias
+            </p>
+          ) : null}
         </div>
 
         {/* O espaçamento fica num div por fora: padding de fieldset não empurra a legend. */}
