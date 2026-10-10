@@ -47,8 +47,20 @@ export async function salvarCadastro(
   const linha: Record<string, unknown> = {};
   for (const c of colunas) if (c in dados) linha[c] = dados[c];
 
-  if (typeof linha.nome === "string") linha.nome = linha.nome.trim();
-  if (!linha.nome) return { ok: false, erro: "O nome é obrigatório." };
+  if (Object.keys(linha).length === 0) return { ok: false, erro: "Nada pra salvar." };
+
+  /**
+   * O botão de situação manda só `ativo`, sem nome nenhum — e está certo: é
+   * a troca de um campo de uma linha que já existe, não um cadastro novo. Exigir
+   * nome aqui travava em erro o botão de ligar e desligar bairro, categoria e
+   * adicional. Só cobra nome quem manda nome, e quem está criando linha nova.
+   */
+  if ("nome" in linha) {
+    if (typeof linha.nome === "string") linha.nome = linha.nome.trim();
+    if (!linha.nome) return { ok: false, erro: "O nome é obrigatório." };
+  } else if (!id) {
+    return { ok: false, erro: "O nome é obrigatório." };
+  }
 
   const resposta = id
     ? await supabase.from(tabela).update(linha).eq("id", id).select("id").single()
