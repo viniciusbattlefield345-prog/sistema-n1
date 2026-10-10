@@ -113,35 +113,136 @@ if (Test-Path $TAILSCALE) {
 }
 
 # =====================================================================
-# 2. ENTRAR NA REDE (aqui VOCE clica: tem que fazer login)
+# 2. ENTRAR NA REDE
+#
+#    Aqui moram os dois jeitos de falhar CALADO, e os dois agora estao
+#    tratados. Foi o que derrubou as tentativas de 10/10:
+#
+#    a) 'tailscale up' imprime um link e FICA PARADO esperando alguem
+#       abrir. Antes o script so mandava rodar e ia conferir o resultado:
+#       ninguem via o link, ninguem logava, e a tela parecia normal.
+#       Agora o script LE o link da saida e abre o navegador sozinho.
+#
+#    b) Login na conta errada deixa tudo verde e os dois PCs nunca se
+#       enxergam. Agora a conta e conferida; se estiver errada, o script
+#       sai dela sozinho.
 # =====================================================================
 Passo "2/5" "Entrando na rede..."
 
-$ip = ""
-try { $ip = (& $TAILSCALE ip -4 2>$null | Select-Object -First 1) } catch {}
+# O servico tem que estar de pe antes de qualquer pergunta ao Tailscale.
+$svcTs = Get-Service Tailscale -ErrorAction SilentlyContinue
+if ($svcTs) {
+  Set-Service Tailscale -StartupType Automatic -ErrorAction SilentlyContinue
+  if ($svcTs.Status -ne "Running") { Start-Service Tailscale -ErrorAction SilentlyContinue }
+  Start-Sleep -Seconds 3
+}
 
+# A conta tem id numerico, entao a chave do objeto nao da pra escrever
+# com ponto: tem que procurar na lista de propriedades.
+function ContaAtual {
+  try {
+    $j = & $TAILSCALE status --json 2>$null | ConvertFrom-Json
+    $id = "$($j.Self.UserID)"
+    $u = $j.User.PSObject.Properties | Where-Object { $_.Name -eq $id }
+    if ($u) { return $u.Value.LoginName }
+  } catch {}
+  return ""
+}
+function IpAtual {
+  try { return (& $TAILSCALE ip -4 2>$null | Select-Object -First 1) } catch { return "" }
+}
+
+$contaJa = ContaAtual
+if ($contaJa -and $contaJa -ne $CONTA) {
+  Atencao "Este PC estava logado como '$contaJa' - conta ERRADA."
+  Atencao "Saindo dela pra entrar na certa..."
+  & $TAILSCALE logout 2>&1 | Out-Host
+  Start-Sleep -Seconds 3
+}
+
+$ip = IpAtual
 if ([string]::IsNullOrWhiteSpace($ip)) {
   Write-Host ""
-  Write-Host "  >>> VAI ABRIR O NAVEGADOR PRA VOCE FAZER LOGIN." -ForegroundColor Yellow
-  Write-Host "  >>> Entre com o Google   $CONTA" -ForegroundColor Yellow
-  Write-Host "  >>> Tem que ser ESSA conta. Com outra, este PC cai numa" -ForegroundColor Yellow
-  Write-Host "  >>> rede separada e o suporte nao alcanca ele." -ForegroundColor Yellow
+  Write-Host "  >>> VOU ABRIR O NAVEGADOR AGORA." -ForegroundColor Yellow
+  Write-Host "  >>> Clique em 'Sign in with Google' e escolha a conta:" -ForegroundColor Yellow
   Write-Host ""
-  # --unattended: o Tailscale sobe mesmo antes de alguem logar no Windows.
-  Start-Process -FilePath $TAILSCALE -ArgumentList "up","--unattended" -NoNewWindow
-  foreach ($tentativa in 1..60) {
+  Write-Host "         $CONTA" -ForegroundColor White
+  Write-Host ""
+  Write-Host "  >>> Tem que ser ESSA. Com outra conta este PC cai numa rede" -ForegroundColor Yellow
+  Write-Host "  >>> separada, fica tudo verde, e o suporte nao alcanca ele." -ForegroundColor Yellow
+  Write-Host ""
+
+  $fOut = Join-Path $env:TEMP "gb-ts-out.txt"
+  $fErr = Join-Path $env:TEMP "gb-ts-err.txt"
+  Remove-Item $fOut, $fErr -Force -ErrorAction SilentlyContinue
+
+  # Roda escondido e com a saida em arquivo justamente pra eu poder LER
+  # o link. --unattended: a rede sobe mesmo antes de alguem logar no
+  # Windows (depois de queda de luz, por exemplo).
+  Start-Process -FilePath $TAILSCALE -ArgumentList "up","--unattended" `
+    -RedirectStandardOutput $fOut -RedirectStandardError $fErr `
+    -WindowStyle Hidden | Out-Null
+
+  # O link pode sair na saida normal ou na de erro. Leio as duas.
+  $link = ""
+  foreach ($i in 1..40) {
+    Start-Sleep -Milliseconds 1500
+    $txt = ""
+    foreach ($f in @($fOut, $fErr)) {
+      if (Test-Path $f) { $txt += (Get-Content $f -Raw -ErrorAction SilentlyContinue) }
+    }
+    $m = [regex]::Match($txt, 'https://login\.tailscale\.com/[^\s"]+')
+    if ($m.Success) { $link = $m.Value.TrimEnd('.', ',', ')'); break }
+    # Ja estava logado na conta certa: nao vem link nenhum, e esta tudo bem.
+    if (-not [string]::IsNullOrWhiteSpace((IpAtual))) { break }
+  }
+
+  if ($link) {
+    Write-Host "      link: $link" -ForegroundColor White
+    # Rede de seguranca: se o navegador nao abrir sozinho (acontece em
+    # janela de administrador), o atalho na Area de Trabalho resolve.
+    try {
+      $atalho = Join-Path $AREA "ENTRAR-NA-REDE-DO-SUPORTE.url"
+      Set-Content -Path $atalho -Value "[InternetShortcut]`r`nURL=$link" -Encoding ascii
+    } catch {}
+    $abriu = $true
+    try { Start-Process $link } catch { $abriu = $false }
+    if ($abriu) {
+      Bom "Navegador aberto. Faca o login nele."
+    } else {
+      Atencao "Nao consegui abrir o navegador daqui. Na Area de Trabalho tem"
+      Atencao "um atalho ENTRAR-NA-REDE-DO-SUPORTE - clique nele."
+    }
+  } elseif ([string]::IsNullOrWhiteSpace((IpAtual))) {
+    Atencao "O Tailscale nao me deu link nenhum. Clique no icone dele perto"
+    Atencao "do relogio e escolha 'Log in'."
+  }
+
+  Write-Host ""
+  Write-Host "      esperando voce terminar o login (ate 6 minutos)..."
+  foreach ($i in 1..120) {
     Start-Sleep -Seconds 3
-    try { $ip = (& $TAILSCALE ip -4 2>$null | Select-Object -First 1) } catch {}
+    $ip = IpAtual
     if (-not [string]::IsNullOrWhiteSpace($ip)) { break }
-    if ($tentativa % 5 -eq 0) { Write-Host "      esperando o login..." }
+    if ($i % 10 -eq 0) { Write-Host "      ainda esperando o login..." }
   }
 }
 
 if ([string]::IsNullOrWhiteSpace($ip)) {
-  Atencao "Ainda nao entrou na rede. Clique no icone do Tailscale perto do"
-  Atencao "relogio, faca login com $CONTA, e rode este arquivo de novo."
+  Ruim "Nao entrou na rede - e sem isso o suporte nao alcanca este PC."
+  Atencao "Clique no icone do Tailscale perto do relogio, faca login com"
+  Atencao "$CONTA, e rode este arquivo de novo."
 } else {
-  Bom "Na rede. Endereco deste PC: $ip"
+  $contaFim = ContaAtual
+  if ($contaFim -and $contaFim -ne $CONTA) {
+    Ruim ""
+    Ruim "ENTROU NA CONTA ERRADA: '$contaFim'"
+    Ruim "Tinha que ser:          $CONTA"
+    Ruim "Rode este arquivo DE NOVO: ele sai dessa conta sozinho."
+    Ruim ""
+  } else {
+    Bom "Na rede, conta $contaFim. Endereco deste PC: $ip"
+  }
 }
 
 # =====================================================================
