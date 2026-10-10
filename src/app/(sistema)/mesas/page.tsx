@@ -1,4 +1,5 @@
 import { criarClienteServidor } from "@/lib/supabase/server";
+import { usuarioAtual } from "@/lib/supabase/sessao";
 import { PainelMesas, type MesaNoSalao } from "./PainelMesas";
 import type { Pedido } from "@/lib/tipos";
 
@@ -6,9 +7,7 @@ export const revalidate = 0;
 
 export default async function PaginaMesas() {
   const supabase = await criarClienteServidor();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await usuarioAtual(supabase);
 
   const umMinutoAtras = new Date(Date.now() - 60_000).toISOString();
   const seisHorasAtras = new Date(Date.now() - 6 * 3600_000).toISOString();

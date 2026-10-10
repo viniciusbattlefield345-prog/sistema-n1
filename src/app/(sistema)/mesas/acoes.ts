@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { criarClienteServidor } from "@/lib/supabase/server";
+import { usuarioAtual } from "@/lib/supabase/sessao";
 import { mandarImprimir } from "@/lib/pedido-servidor";
 import { centavos, reais } from "@/lib/formato";
 import type { FormaPagamento } from "@/lib/tipos";
@@ -12,9 +13,7 @@ const FORMAS: FormaPagamento[] = ["Dinheiro", "Pix", "Cartao Credito", "Cartao D
 
 async function sessao() {
   const supabase = await criarClienteServidor();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await usuarioAtual(supabase);
   return { supabase, user };
 }
 

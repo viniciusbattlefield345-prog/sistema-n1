@@ -1,5 +1,6 @@
 import { createSign } from "node:crypto";
 import { criarClienteServidor } from "@/lib/supabase/server";
+import { usuarioAtual } from "@/lib/supabase/sessao";
 
 export const dynamic = "force-dynamic";
 
@@ -10,9 +11,7 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(request: Request) {
   const supabase = await criarClienteServidor();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await usuarioAtual(supabase);
   if (!user) return new Response("Sessão expirada.", { status: 401 });
 
   // Na Vercel a chave pode ser colada com quebras de linha de verdade;

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { criarClienteServidor } from "@/lib/supabase/server";
+import { usuarioAtual } from "@/lib/supabase/sessao";
 import { Cabecalho } from "@/components/Cabecalho";
 import { lerConfiguracoes } from "@/lib/configuracoes";
 import { PainelRestaurante } from "./PainelRestaurante";
@@ -7,9 +8,7 @@ import { PainelImpressoras } from "./PainelImpressoras";
 
 export default async function PaginaConfiguracoes() {
   const supabase = await criarClienteServidor();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await usuarioAtual(supabase);
 
   const { data: perfil } = await supabase
     .from("perfis")

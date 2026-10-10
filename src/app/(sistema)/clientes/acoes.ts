@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { criarClienteServidor } from "@/lib/supabase/server";
+import { usuarioAtual } from "@/lib/supabase/sessao";
 
 export interface DadosCliente {
   id?: number;
@@ -25,9 +26,7 @@ export async function salvarCliente(
   dados: DadosCliente,
 ): Promise<ResultadoCliente> {
   const supabase = await criarClienteServidor();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await usuarioAtual(supabase);
   if (!user) return { ok: false, erro: "Sessão expirada. Entre de novo." };
 
   const nome = dados.nome.trim();
@@ -64,9 +63,7 @@ export async function salvarCliente(
 
 export async function excluirCliente(id: number): Promise<ResultadoCliente> {
   const supabase = await criarClienteServidor();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await usuarioAtual(supabase);
   if (!user) return { ok: false, erro: "Sessão expirada." };
 
   // Cliente com pedido no histórico não some: o pedido perderia o dono.

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { aprovarPedido, recusarPedido } from "./acoes";
+import { aprovarPedido, recusarPedido, type Resultado } from "./acoes";
 import {
   duracao,
   hora,
@@ -28,31 +28,42 @@ export function CartaoAprovacao({
   const [recusando, setRecusando] = useState(false);
   const [motivo, setMotivo] = useState("");
   const [erro, setErro] = useState<string | null>(null);
+  const [feito, setFeito] = useState<"aprovado" | "recusado" | null>(null);
   const [ocupado, iniciar] = useTransition();
 
   const rotulo = rotuloPedido(pedido);
   const nome = pedido.cliente_nome !== rotulo ? pedido.cliente_nome : null;
 
-  function aprovar() {
+  /**
+   * O cartão responde na hora e o servidor trabalha atrás.
+   *
+   * Esperar a resposta travava o botão em "Aprovando…" até o servidor conferir
+   * o login, gravar o pedido, enfileirar o cupom E redesenhar a tela toda —
+   * quase um segundo de dedo no ar. Quem tira o cartão da tela é o `useAoVivo`,
+   * que já recarrega sozinho. Se der errado, o cartão volta com o motivo.
+   */
+  function enviar(qual: "aprovado" | "recusado", fn: () => Promise<Resultado>) {
     setErro(null);
+    setFeito(qual);
     iniciar(async () => {
-      const r = await aprovarPedido(pedido.id);
-      if (!r.ok) setErro(r.erro);
+      const r = await fn();
+      if (!r.ok) {
+        setFeito(null);
+        setErro(r.erro);
+      }
     });
   }
 
-  function recusar() {
-    setErro(null);
-    iniciar(async () => {
-      const r = await recusarPedido(pedido.id, motivo);
-      if (!r.ok) setErro(r.erro);
-    });
-  }
+  const aprovar = () => enviar("aprovado", () => aprovarPedido(pedido.id));
+  const recusar = () => enviar("recusado", () => recusarPedido(pedido.id, motivo));
 
   return (
     <article
       style={{ "--i": Math.min(indice, 4) } as React.CSSProperties}
-      className="anim-entrar rounded-2xl border-2 border-ouro/70 bg-carvao p-4"
+      className={
+        "anim-entrar rounded-2xl border-2 bg-carvao p-4 transition-opacity " +
+        (feito ? "border-borda opacity-50" : "border-ouro/70")
+      }
     >
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -136,7 +147,11 @@ export function CartaoAprovacao({
         </p>
       )}
 
-      {recusando ? (
+      {feito ? (
+        <p className="mt-4 rounded-lg border border-borda bg-breu/60 px-3 py-2.5 text-sm font-semibold text-creme-suave">
+          {feito === "aprovado" ? "Aprovado · saindo o cupom" : "Recusado"}
+        </p>
+      ) : recusando ? (
         <div className="mt-4 space-y-2.5">
           <div className="flex flex-wrap gap-1.5">
             {MOTIVOS.map((m) => (

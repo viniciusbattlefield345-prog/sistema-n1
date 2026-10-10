@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { criarClienteServidor } from "@/lib/supabase/server";
+import { usuarioAtual } from "@/lib/supabase/sessao";
 
 export type Resultado = { ok: true } | { ok: false; erro: string };
 
@@ -18,9 +19,7 @@ type Contexto =
 
 async function exigirDono(): Promise<Contexto> {
   const supabase = await criarClienteServidor();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await usuarioAtual(supabase);
   if (!user) return { autorizado: false, erro: "Sessão expirada." };
 
   const { data: perfil } = await supabase

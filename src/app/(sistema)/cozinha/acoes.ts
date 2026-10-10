@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { criarClienteServidor } from "@/lib/supabase/server";
+import { usuarioAtual } from "@/lib/supabase/sessao";
 import type { StatusPedido } from "@/lib/tipos";
 
 export type Resultado = { ok: true } | { ok: false; erro: string };
@@ -11,9 +12,7 @@ export async function mudarStatus(
   status: StatusPedido,
 ): Promise<Resultado> {
   const supabase = await criarClienteServidor();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await usuarioAtual(supabase);
   if (!user) return { ok: false, erro: "Sessão expirada." };
 
   const { error } = await supabase

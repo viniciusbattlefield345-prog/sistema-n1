@@ -2,15 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { criarClienteServidor } from "@/lib/supabase/server";
+import { usuarioAtual } from "@/lib/supabase/sessao";
 
 export type Resultado = { ok: true } | { ok: false; erro: string };
 
 /** Cancelar não apaga: o pedido some das contas mas fica no histórico. */
 export async function cancelarPedido(id: number): Promise<Resultado> {
   const supabase = await criarClienteServidor();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await usuarioAtual(supabase);
   if (!user) return { ok: false, erro: "Sessão expirada." };
 
   const { data: pedido } = await supabase

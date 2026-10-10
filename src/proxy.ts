@@ -1,4 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
+import { usuarioAtual } from "@/lib/supabase/sessao";
 import { NextResponse, type NextRequest } from "next/server";
 
 /** Rotas que abrem sem login. */
@@ -48,11 +49,10 @@ export async function proxy(request: NextRequest) {
     },
   );
 
-  // getUser() revalida o token no servidor a cada request.
-  // Nao troque por getSession(): esse le o cookie sem conferir.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Confere a assinatura do login aqui mesmo, com a chave publica do projeto
+  // (ES256) - sem viagem de rede. Veja lib/supabase/sessao.ts.
+  // Nao troque por getSession(): esse le o cookie sem conferir nada.
+  const user = await usuarioAtual(supabase);
 
   const ehPublica = PUBLICAS.some((p) => caminho.startsWith(p));
 

@@ -1,14 +1,13 @@
 import { redirect } from "next/navigation";
 import { criarClienteServidor } from "@/lib/supabase/server";
+import { usuarioAtual } from "@/lib/supabase/sessao";
 import { Moldura } from "@/components/Moldura";
 
 export default async function LayoutSistema({
   children,
 }: LayoutProps<"/">) {
   const supabase = await criarClienteServidor();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await usuarioAtual(supabase);
 
   if (!user) redirect("/login");
 

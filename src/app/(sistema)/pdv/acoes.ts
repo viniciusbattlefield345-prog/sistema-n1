@@ -1,6 +1,7 @@
 "use server";
 
 import { criarClienteServidor } from "@/lib/supabase/server";
+import { usuarioAtual } from "@/lib/supabase/sessao";
 import { revalidatePath } from "next/cache";
 import {
   contaDaMesa,
@@ -41,9 +42,7 @@ export type Resultado =
 export async function salvarPedido(dados: PedidoEnviado): Promise<Resultado> {
   const supabase = await criarClienteServidor();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await usuarioAtual(supabase);
   if (!user) return { ok: false, erro: "Sessão expirada. Entre de novo." };
 
   const ehMesa = dados.tipo === "MESA";
@@ -147,9 +146,7 @@ export async function salvarCliente(dados: {
   referencia: string;
 }) {
   const supabase = await criarClienteServidor();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await usuarioAtual(supabase);
   if (!user) return { ok: false as const, erro: "Sessão expirada." };
 
   if (!dados.nome.trim())

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { criarClienteServidor } from "@/lib/supabase/server";
+import { usuarioAtual } from "@/lib/supabase/sessao";
 import { clienteServico } from "@/lib/supabase/admin";
 
 export interface DadosProduto {
@@ -24,9 +25,7 @@ export type Resultado = { ok: true; id: number } | { ok: false; erro: string };
 
 export async function salvarProduto(dados: DadosProduto): Promise<Resultado> {
   const supabase = await criarClienteServidor();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await usuarioAtual(supabase);
   if (!user) return { ok: false, erro: "Sessão expirada." };
 
   const nome = dados.nome.trim();
@@ -100,9 +99,7 @@ export async function enviarFoto(
   form: FormData,
 ): Promise<{ ok: true; url: string } | { ok: false; erro: string }> {
   const supabase = await criarClienteServidor();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await usuarioAtual(supabase);
   if (!user) return { ok: false, erro: "Sessão expirada." };
 
   const arquivo = form.get("foto");
@@ -139,9 +136,7 @@ export async function alternarDisponivel(
   disponivel: boolean,
 ): Promise<Resultado> {
   const supabase = await criarClienteServidor();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await usuarioAtual(supabase);
   if (!user) return { ok: false, erro: "Sessão expirada." };
 
   const { error } = await supabase
@@ -157,9 +152,7 @@ export async function alternarDisponivel(
 
 export async function excluirProduto(id: number): Promise<Resultado> {
   const supabase = await criarClienteServidor();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await usuarioAtual(supabase);
   if (!user) return { ok: false, erro: "Sessão expirada." };
 
   const { count } = await supabase

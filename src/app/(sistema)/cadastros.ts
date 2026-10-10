@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { criarClienteServidor } from "@/lib/supabase/server";
+import { usuarioAtual } from "@/lib/supabase/sessao";
 
 /**
  * Cadastros simples (categoria, adicional, bairro) compartilham a mesma
@@ -39,9 +40,7 @@ export async function salvarCadastro(
   if (!colunas) return { ok: false, erro: "Cadastro desconhecido." };
 
   const supabase = await criarClienteServidor();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await usuarioAtual(supabase);
   if (!user) return { ok: false, erro: "Sessão expirada." };
 
   // Descarta qualquer campo que não esteja na lista permitida
@@ -72,9 +71,7 @@ export async function excluirCadastro(
   if (!PERMITIDO[tabela]) return { ok: false, erro: "Cadastro desconhecido." };
 
   const supabase = await criarClienteServidor();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await usuarioAtual(supabase);
   if (!user) return { ok: false, erro: "Sessão expirada." };
 
   const { error } = await supabase.from(tabela).delete().eq("id", id);

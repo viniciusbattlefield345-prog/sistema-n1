@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { criarClienteServidor } from "@/lib/supabase/server";
+import { usuarioAtual } from "@/lib/supabase/sessao";
 import { Cabecalho, Vazio } from "@/components/Cabecalho";
 import { nomePagamento, reais } from "@/lib/formato";
 import type { FormaPagamento } from "@/lib/tipos";
@@ -23,9 +24,7 @@ const FORA_DA_CONTA = '("CANCELADO","AGUARDANDO")';
 
 export default async function PaginaRelatorios() {
   const supabase = await criarClienteServidor();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await usuarioAtual(supabase);
 
   const { data: perfil } = await supabase
     .from("perfis")

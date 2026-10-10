@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { criarClienteServidor } from "@/lib/supabase/server";
+import { usuarioAtual } from "@/lib/supabase/sessao";
 import { ListaAcessos, type LinhaAcesso } from "./ListaAcessos";
 import type { Papel } from "@/lib/tipos";
 
@@ -31,9 +32,7 @@ async function buscarEmails(): Promise<Map<string, string>> {
 
 export default async function PaginaAcessos() {
   const supabase = await criarClienteServidor();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await usuarioAtual(supabase);
 
   const { data: eu } = await supabase
     .from("perfis")

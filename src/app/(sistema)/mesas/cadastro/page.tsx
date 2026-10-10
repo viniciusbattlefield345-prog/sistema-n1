@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { criarClienteServidor } from "@/lib/supabase/server";
+import { usuarioAtual } from "@/lib/supabase/sessao";
 import { enderecoDoSite } from "@/lib/endereco";
 import { CadastroMesas } from "./CadastroMesas";
 import type { Mesa } from "@/lib/tipos";
@@ -8,9 +9,7 @@ export const revalidate = 0;
 
 export default async function PaginaCadastroMesas() {
   const supabase = await criarClienteServidor();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await usuarioAtual(supabase);
 
   const { data: perfil } = await supabase
     .from("perfis")
