@@ -1,5 +1,13 @@
 import { Cupom } from "./escpos";
-import { hora, nomePagamento, numero, numeroPedido, rotuloPedido, telefone } from "./formato";
+import {
+  extraComVezes,
+  hora,
+  nomePagamento,
+  numero,
+  numeroPedido,
+  rotuloPedido,
+  telefone,
+} from "./formato";
 import type { Comanda, ConfigImpressoras, ConfigRestaurante, ItemPedido, Pedido } from "./tipos";
 
 const dia = (iso: string) =>
@@ -29,7 +37,7 @@ function listaDeItens(c: Cupom, itens: ItemPedido[]) {
       : item.produto_nome;
     c.negrito(true).item(Number(item.quantidade), descricao, numero(valorDoItem(item)));
     c.negrito(false);
-    for (const extra of item.item_adicionais ?? []) c.detalhe(`+ ${extra.nome}`);
+    for (const extra of item.item_adicionais ?? []) c.detalhe("+ " + extraComVezes(extra));
     if (item.observacao) {
       c.negrito(true).detalhe(`>> ${item.observacao.toUpperCase()}`).negrito(false);
     }
@@ -49,7 +57,7 @@ function listaDeItensCozinha(c: Cupom, itens: ItemPedido[]) {
       : item.produto_nome;
     c.tamanho(2).negrito(true).item(Number(item.quantidade), descricao.toUpperCase(), "");
     c.tamanho(1).negrito(false);
-    for (const extra of item.item_adicionais ?? []) c.detalhe(`+ ${extra.nome}`);
+    for (const extra of item.item_adicionais ?? []) c.detalhe("+ " + extraComVezes(extra));
     if (item.observacao) {
       c.negrito(true).detalhe(`>> ${item.observacao.toUpperCase()}`).negrito(false);
     }
@@ -223,7 +231,7 @@ export function cupomDeTeste(restaurante: ConfigRestaurante, cfg: ConfigImpresso
   c.linha("teste de impressão").alinhar(0);
   c.separador();
   c.negrito(true).item(2, "X Bacon", "50,00").negrito(false);
-  c.detalhe("+ Bacon");
+  c.detalhe("+ 2x Bacon");
   c.negrito(true).detalhe(">> SEM CEBOLA").negrito(false);
   c.separador();
   totalGrande(c, "TOTAL", 50);

@@ -2,16 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { aprovarPedido, recusarPedido, type Resultado } from "./acoes";
-import {
-  duracao,
-  hora,
-  minutosDesde,
-  nomePagamento,
-  numeroPedido,
-  reais,
-  rotuloPedido,
-  telefone,
-} from "@/lib/formato";
+import { duracao, extraComVezes, hora, minutosDesde, nomePagamento, numeroPedido, reais, rotuloPedido, telefone } from "@/lib/formato";
 import type { Pedido } from "@/lib/tipos";
 
 const MOTIVOS = ["Item acabou", "Pedido repetido", "Cozinha fechando", "Fale com o atendente"];
@@ -122,7 +113,7 @@ export function CartaoAprovacao({
             </span>
             {(item.item_adicionais ?? []).length > 0 && (
               <p className="pl-6 text-xs text-creme-suave">
-                + {(item.item_adicionais ?? []).map((a) => a.nome).join(", ")}
+                + {(item.item_adicionais ?? []).map(extraComVezes).join(", ")}
               </p>
             )}
             {item.observacao && (

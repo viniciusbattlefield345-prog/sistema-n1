@@ -49,7 +49,7 @@ export function EscolhaProduto({
 
   const [variacaoId, setVariacaoId] = useState<number | null>(variacoes[0]?.id ?? null);
   const [segundoId, setSegundoId] = useState<number | null>(null);
-  const [escolhidos, setEscolhidos] = useState<number[]>([]);
+  const [quantidades, setQuantidades] = useState<Record<number, number>>({});
   const [quantidade, setQuantidade] = useState(1);
   const [observacao, setObservacao] = useState("");
 
@@ -65,9 +65,12 @@ export function EscolhaProduto({
     ? Math.max(precoSozinho, Number(segundo.preco_base))
     : precoSozinho;
   const nomeItem = segundo ? `1/2 ${produto.nome} + 1/2 ${segundo.nome}` : produto.nome;
-  const marcados = extras.filter((a) => escolhidos.includes(a.id));
+  const marcados = extras
+    .map((a) => ({ extra: a, vezes: quantidades[a.id] ?? 0 }))
+    .filter((e) => e.vezes > 0);
   const total =
-    (precoUnitario + marcados.reduce((s, a) => s + Number(a.preco), 0)) * quantidade;
+    (precoUnitario + marcados.reduce((s, e) => s + Number(e.extra.preco) * e.vezes, 0)) *
+    quantidade;
 
   function confirmar() {
     aoAdicionar({
@@ -80,10 +83,11 @@ export function EscolhaProduto({
       preco_unitario: precoUnitario,
       quantidade,
       observacao: observacao.trim(),
-      adicionais: marcados.map((a) => ({
-        adicional_id: a.id,
-        nome: a.nome,
-        preco: Number(a.preco),
+      adicionais: marcados.map((e) => ({
+        adicional_id: e.extra.id,
+        nome: e.extra.nome,
+        preco: Number(e.extra.preco),
+        quantidade: e.vezes,
       })),
     });
   }
@@ -184,33 +188,57 @@ export function EscolhaProduto({
           <div className="px-5 pt-5">
             <fieldset>
               <legend className="rotulo">Adicionais</legend>
+              <p className="mb-2 text-xs text-creme-fraco">
+                Toque no + pra repetir. Dá pra pedir duas carnes, três bacons.
+              </p>
               <div className="divide-y divide-borda overflow-hidden rounded-2xl border border-borda">
                 {extras.map((a) => {
-                  const marcado = escolhidos.includes(a.id);
+                  const vezes = quantidades[a.id] ?? 0;
+                  const mudar = (passo: number) =>
+                    setQuantidades((atual) => ({
+                      ...atual,
+                      [a.id]: Math.max(0, Math.min(10, (atual[a.id] ?? 0) + passo)),
+                    }));
                   return (
-                    <label
+                    <div
                       key={a.id}
-                      className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3.5"
+                      className={
+                        "flex items-center justify-between gap-3 px-4 py-3 " +
+                        (vezes > 0 ? "bg-ouro/5" : "")
+                      }
                     >
-                      <span className="flex items-center gap-3 text-sm">
-                        <input
-                          type="checkbox"
-                          className="size-5 accent-ouro"
-                          checked={marcado}
-                          onChange={() =>
-                            setEscolhidos((atual) =>
-                              marcado ? atual.filter((id) => id !== a.id) : [...atual, a.id],
-                            )
-                          }
-                        />
-                        {a.nome}
-                      </span>
-                      {Number(a.preco) > 0 && (
-                        <span className="tabular text-sm text-creme-suave">
-                          + {reais(Number(a.preco))}
+                      <span className="min-w-0 flex-1 text-sm">
+                        <span className={vezes > 0 ? "font-semibold text-creme" : ""}>
+                          {a.nome}
                         </span>
-                      )}
-                    </label>
+                        {Number(a.preco) > 0 && (
+                          <span className="tabular ml-2 text-xs text-creme-suave">
+                            + {reais(Number(a.preco))} cada
+                          </span>
+                        )}
+                      </span>
+                      <span className="flex shrink-0 items-center gap-2">
+                        <button
+                          type="button"
+                          aria-label={`Tirar um ${a.nome}`}
+                          disabled={vezes === 0}
+                          onClick={() => mudar(-1)}
+                          className="size-9 rounded-full border border-borda text-lg leading-none disabled:opacity-30"
+                        >
+                          −
+                        </button>
+                        <span className="tabular w-5 text-center text-sm font-bold">{vezes}</span>
+                        <button
+                          type="button"
+                          aria-label={`Mais um ${a.nome}`}
+                          disabled={vezes >= 10}
+                          onClick={() => mudar(1)}
+                          className="size-9 rounded-full border border-ouro/60 text-lg leading-none text-ouro disabled:opacity-30"
+                        >
+                          +
+                        </button>
+                      </span>
+                    </div>
                   );
                 })}
               </div>

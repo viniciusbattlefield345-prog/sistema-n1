@@ -15,7 +15,12 @@ export interface ItemEnviado {
   segundo_produto_id?: number | null;
   quantidade: number;
   observacao: string;
-  adicionais: number[]; // ids
+  /**
+   * O que o cliente pediu junto. `{ adicional_id, quantidade }` e a forma do
+   * cardapio do cliente; o PDV ainda manda so o id, e vale 1. As duas formas
+   * continuam aceitas pra nao quebrar quem ja esta na rua.
+   */
+  adicionais: (number | { adicional_id: number; quantidade?: number })[];
 }
 
 export interface ItemMontado {
@@ -27,13 +32,20 @@ export interface ItemMontado {
   quantidade: number;
   preco_unitario: number;
   observacao: string | null;
-  adicionais: { adicional_id: number; nome: string; preco: number }[];
+  adicionais: { adicional_id: number; nome: string; preco: number; quantidade: number }[];
 }
 
 export type Falha = { ok: false; erro: string };
 
 const MAX_ITENS = 40;
 const MAX_QUANTIDADE = 99;
+/** Teto por adicional num item. Dez bacons ja e pedido errado, nao pedido. */
+const MAX_ADICIONAL = 10;
+
+/** Aceita tanto o id puro quanto a forma com quantidade. */
+function idDoExtra(e: number | { adicional_id: number; quantidade?: number }): number {
+  return typeof e === "number" ? Number(e) : Number(e.adicional_id);
+}
 
 /**
  * Relê o cardápio no banco e monta os itens com o preço de lá.
@@ -71,7 +83,9 @@ export async function montarItens(
     ),
   ];
   const idsAdicional = [
-    ...new Set(enviados.flatMap((i) => (Array.isArray(i.adicionais) ? i.adicionais : []))),
+    ...new Set(
+      enviados.flatMap((i) => (Array.isArray(i.adicionais) ? i.adicionais.map(idDoExtra) : [])),
+    ),
   ];
 
   const [produtosRes, variacoesRes, adicionaisRes, ligacoesRes, categoriasRes] = await Promise.all([
@@ -162,13 +176,34 @@ export async function montarItens(
       : quantidade > 0 && quantidade <= MAX_QUANTIDADE * 10;
     if (!quantidadeValida) return { ok: false, erro: "Quantidade inválida." };
 
+    /**
+     * Adicional repetido vira UMA linha com quantidade, nao varias linhas
+     * iguais — e assim que a cozinha le "2x Carne" no cupom em vez de
+     * "+ Carne" duas vezes, que e facil de perder no meio da comanda.
+     *
+     * Quem mandar o mesmo id duas vezes tem o pedido somado: a conta fica
+     * igual dos dois jeitos, e o navegador nao precisa saber da regra.
+     */
+    const vezesPorExtra = new Map<number, number>();
+    for (const e of Array.isArray(enviado.adicionais) ? enviado.adicionais : []) {
+      const id = idDoExtra(e);
+      const pedidas = typeof e === "number" ? 1 : Math.trunc(Number(e.quantidade ?? 1));
+      if (!Number.isFinite(id) || !Number.isFinite(pedidas) || pedidas < 1) continue;
+      vezesPorExtra.set(id, Math.min(MAX_ADICIONAL, (vezesPorExtra.get(id) ?? 0) + pedidas));
+    }
+
     const adicionais: ItemMontado["adicionais"] = [];
-    for (const id of new Set(Array.isArray(enviado.adicionais) ? enviado.adicionais : [])) {
-      const a = extras.get(Number(id));
+    for (const [id, vezes] of vezesPorExtra) {
+      const a = extras.get(id);
       if (!a) continue;
       if (rigoroso && (!a.ativo || !ligados.has(`${produto.id}:${a.id}`)))
         return { ok: false, erro: `O adicional ${a.nome} não está disponível pra ${produto.nome}.` };
-      adicionais.push({ adicional_id: a.id, nome: a.nome, preco: Number(a.preco) });
+      adicionais.push({
+        adicional_id: a.id,
+        nome: a.nome,
+        preco: Number(a.preco),
+        quantidade: vezes,
+      });
     }
 
     itens.push({
@@ -255,7 +290,7 @@ export async function gravarPedido(
       adicional_id: a.adicional_id,
       nome: a.nome,
       preco: a.preco,
-      quantidade: 1,
+      quantidade: a.quantidade,
     })),
   );
 

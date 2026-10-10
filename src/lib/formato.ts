@@ -98,11 +98,23 @@ export function rotuloPedido(p: {
 
 /** Preco final de um item: base/variacao + adicionais, vezes a quantidade. */
 export function totalItem(item: ItemCarrinho): number {
-  const extras = item.adicionais.reduce((s, a) => s + a.preco, 0);
+  // Adicional repetido conta repetido: 2 carnes custam duas carnes.
+  const extras = item.adicionais.reduce((s, a) => s + a.preco * a.quantidade, 0);
   return (item.preco_unitario + extras) * item.quantidade;
 }
 
 /** Soma dos itens do carrinho, sem taxa de entrega e sem desconto. */
+/**
+ * Como o adicional aparece em qualquer tela: "2x Bacon" quando repete, só
+ * "Bacon" quando é um. Fica aqui, e não em cada tela, porque o cliente, o
+ * atendente, a cozinha e o cupom têm que ler exatamente a mesma coisa — se
+ * uma tela contar diferente das outras, alguém cobra ou entrega errado.
+ */
+export function extraComVezes(a: { nome: string; quantidade: number }): string {
+  const vezes = Number(a.quantidade);
+  return vezes > 1 ? `${vezes}x ${a.nome}` : a.nome;
+}
+
 export function subtotalCarrinho(itens: ItemCarrinho[]): number {
   return itens.reduce((s, i) => s + totalItem(i), 0);
 }

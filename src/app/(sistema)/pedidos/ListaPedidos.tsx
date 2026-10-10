@@ -4,14 +4,7 @@ import { Fragment, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { Cabecalho, Vazio } from "@/components/Cabecalho";
 import { cancelarPedido } from "./acoes";
-import {
-  dataHora,
-  nomePagamento,
-  numeroPedido,
-  reais,
-  rotuloPedido,
-  telefone,
-} from "@/lib/formato";
+import { dataHora, extraComVezes, nomePagamento, numeroPedido, reais, rotuloPedido, telefone } from "@/lib/formato";
 import type { Pedido, StatusPedido } from "@/lib/tipos";
 
 const COR: Record<StatusPedido, string> = {
@@ -228,7 +221,7 @@ export function ListaPedidos({ pedidos }: { pedidos: Pedido[] }) {
                               {(item.item_adicionais ?? []).length > 0 && (
                                 <span className="text-creme-suave">
                                   {" — "}
-                                  {(item.item_adicionais ?? []).map((a) => a.nome).join(", ")}
+                                  {(item.item_adicionais ?? []).map(extraComVezes).join(", ")}
                                 </span>
                               )}
                               {item.observacao && (

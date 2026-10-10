@@ -183,7 +183,10 @@ export function CardapioMesa({
             variacao_id: i.variacao_id,
             quantidade: i.quantidade,
             observacao: i.observacao,
-            adicionais: i.adicionais.map((a) => a.adicional_id),
+            adicionais: i.adicionais.map((a) => ({
+              adicional_id: a.adicional_id,
+              quantidade: a.quantidade,
+            })),
           })),
         });
         if (!r.ok) {

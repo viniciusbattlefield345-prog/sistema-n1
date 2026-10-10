@@ -3,15 +3,7 @@
 import { useState, useTransition } from "react";
 import { mudarStatus } from "../cozinha/acoes";
 import { reimprimirPedido } from "../mesas/acoes";
-import {
-  duracao,
-  hora,
-  minutosDesde,
-  nomePagamento,
-  numeroPedido,
-  reais,
-  telefone,
-} from "@/lib/formato";
+import { duracao, extraComVezes, hora, minutosDesde, nomePagamento, numeroPedido, reais, telefone } from "@/lib/formato";
 import type { Pedido, StatusPedido } from "@/lib/tipos";
 
 const COR: Partial<Record<StatusPedido, string>> = {
@@ -111,7 +103,7 @@ export function CartaoEntrega({ pedido, indice = 0 }: { pedido: Pedido; indice?:
             </span>
             {(item.item_adicionais ?? []).length > 0 && (
               <p className="pl-6 text-xs text-creme-suave">
-                + {(item.item_adicionais ?? []).map((a) => a.nome).join(", ")}
+                + {(item.item_adicionais ?? []).map(extraComVezes).join(", ")}
               </p>
             )}
             {item.observacao && (

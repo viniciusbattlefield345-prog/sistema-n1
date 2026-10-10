@@ -6,14 +6,7 @@ import { viaPedido } from "@/lib/cupom";
 import { imprimirCru } from "@/lib/impressora";
 import { useAoVivo } from "@/lib/aoVivo";
 import { reimprimirPedido, tentarImpressaoDeNovo } from "../../mesas/acoes";
-import {
-  hora,
-  nomePagamento,
-  numero,
-  numeroPedido,
-  rotuloPedido,
-  telefone,
-} from "@/lib/formato";
+import { extraComVezes, hora, nomePagamento, numero, numeroPedido, rotuloPedido, telefone } from "@/lib/formato";
 import type {
   ConfigImpressoras,
   ConfigRestaurante,
@@ -204,7 +197,7 @@ export function PainelImpressao({
               </div>
               {extras.map((e) => (
                 <p key={e.id} className="pl-7 text-[0.7rem] text-creme-suave">
-                  + {e.nome}
+                  + {extraComVezes(e)}
                 </p>
               ))}
               {item.observacao && (

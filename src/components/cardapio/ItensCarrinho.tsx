@@ -1,7 +1,7 @@
 "use client";
 
 import { Passo } from "./Passo";
-import { reais, totalItem } from "@/lib/formato";
+import { extraComVezes, reais, totalItem } from "@/lib/formato";
 import type { ItemCarrinho } from "@/lib/tipos";
 
 /** As linhas do carrinho, com somar, tirar e remover. */
@@ -29,7 +29,7 @@ export function ItensCarrinho({
             </p>
             {i.adicionais.length > 0 && (
               <p className="text-xs text-creme-suave">
-                + {i.adicionais.map((a) => a.nome).join(", ")}
+                + {i.adicionais.map(extraComVezes).join(", ")}
               </p>
             )}
             {i.observacao && <p className="text-xs italic text-preparo">“{i.observacao}”</p>}

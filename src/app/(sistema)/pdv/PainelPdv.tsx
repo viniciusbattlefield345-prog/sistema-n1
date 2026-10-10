@@ -191,7 +191,7 @@ export function PainelPdv({
   const subtotal = itens.reduce(
     (s, i) =>
       s +
-      (i.preco_unitario + i.adicionais.reduce((x, a) => x + a.preco, 0)) *
+      (i.preco_unitario + i.adicionais.reduce((x, a) => x + a.preco * a.quantidade, 0)) *
         i.quantidade,
     0,
   );

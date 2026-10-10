@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Cabecalho, Vazio } from "@/components/Cabecalho";
 import { mudarStatus } from "./acoes";
 import { useAoVivo } from "@/lib/aoVivo";
-import { hora, minutosDesde, numeroPedido, rotuloPedido } from "@/lib/formato";
+import { extraComVezes, hora, minutosDesde, numeroPedido, rotuloPedido } from "@/lib/formato";
 import type { Pedido, StatusPedido } from "@/lib/tipos";
 
 /** As três colunas da produção, na ordem em que o pedido anda. */
@@ -204,7 +204,7 @@ function Ficha({
             </span>
             {(item.item_adicionais ?? []).length > 0 && (
               <p className="pl-6 text-xs leading-snug text-creme-suave">
-                + {(item.item_adicionais ?? []).map((a) => a.nome).join(" · ")}
+                + {(item.item_adicionais ?? []).map(extraComVezes).join(" · ")}
               </p>
             )}
             {item.observacao && (

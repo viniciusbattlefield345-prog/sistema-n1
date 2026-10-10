@@ -68,10 +68,13 @@ export function ModalItem({
       preco_unitario: precoUnitario,
       quantidade,
       observacao,
+      // O PDV ainda marca uma unidade por adicional. A quantidade existe no
+      // item desde agora; quem repete hoje e o cliente, pelo QR.
       adicionais: extras.map((a) => ({
         adicional_id: a.id,
         nome: a.nome,
         preco: Number(a.preco),
+        quantidade: 1,
       })),
     });
   }

@@ -13,19 +13,7 @@ import {
 } from "../acoes";
 import { cancelarPedido } from "../../pedidos/acoes";
 import { useAoVivo } from "@/lib/aoVivo";
-import {
-  centavos,
-  duracao,
-  FORMAS_PAGAMENTO,
-  hora,
-  minutosDesde,
-  nomePagamento,
-  numero,
-  numeroPedido,
-  paraNumero,
-  reais,
-  rotuloPedido,
-} from "@/lib/formato";
+import { FORMAS_PAGAMENTO, centavos, duracao, extraComVezes, hora, minutosDesde, nomePagamento, numero, numeroPedido, paraNumero, reais, rotuloPedido } from "@/lib/formato";
 import type {
   Comanda,
   FormaPagamento,
@@ -422,7 +410,7 @@ function CartaoPedido({
             {(item.item_adicionais ?? []).length > 0 && (
               <span className="text-creme-suave">
                 {" "}
-                + {(item.item_adicionais ?? []).map((a) => a.nome).join(", ")}
+                + {(item.item_adicionais ?? []).map(extraComVezes).join(", ")}
               </span>
             )}
             {item.observacao && (

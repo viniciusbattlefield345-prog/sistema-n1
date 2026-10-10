@@ -217,7 +217,7 @@ export interface ItemCarrinho {
   preco_unitario: number; // produto ou variacao, sem adicionais
   quantidade: number;
   observacao: string;
-  adicionais: { adicional_id: number; nome: string; preco: number }[];
+  adicionais: { adicional_id: number; nome: string; preco: number; quantidade: number }[];
 }
 
 export interface ConfigRestaurante {

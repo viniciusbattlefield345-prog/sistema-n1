@@ -1,6 +1,6 @@
 "use client";
 
-import { numero, totalItem } from "@/lib/formato";
+import { extraComVezes, numero, totalItem } from "@/lib/formato";
 import type { ItemCarrinho, TipoPedido } from "@/lib/tipos";
 
 /**
@@ -84,7 +84,7 @@ export function Comanda({
                     </p>
                     {item.adicionais.map((a) => (
                       <p key={a.adicional_id} className="text-[0.7rem] text-creme-suave">
-                        + {a.nome} ({numero(a.preco)})
+                        + {extraComVezes(a)} ({numero(a.preco * a.quantidade)})
                       </p>
                     ))}
                     {item.observacao && (
