@@ -267,6 +267,10 @@ export function PainelPdv({
         observacao: null,
         itens: itens.map((i) => ({
           produto_id: i.produto_id,
+          // A outra metade da pizza. Sem esta linha o painel deixava escolher
+          // o segundo sabor, a comanda na tela mostrava os dois, e o servidor
+          // recebia pizza inteira — saia errado no cupom e na conta.
+          segundo_produto_id: i.segundo_produto_id ?? null,
           variacao_id: i.variacao_id,
           quantidade: i.quantidade,
           observacao: i.observacao,
