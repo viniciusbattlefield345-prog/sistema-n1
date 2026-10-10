@@ -15,15 +15,7 @@ import {
   type BairroAtendido,
   type DadosCliente,
 } from "./dados";
-import {
-  FORMAS_PAGAMENTO,
-  nomePagamento,
-  numeroPedido,
-  paraNumero,
-  reais,
-  subtotalCarrinho,
-  telefone as formatarTelefone,
-} from "@/lib/formato";
+import { FORMAS_PAGAMENTO, curarCarrinho, nomePagamento, numeroPedido, paraNumero, reais, subtotalCarrinho, telefone as formatarTelefone } from "@/lib/formato";
 import { gravar, ler } from "@/lib/memoria";
 import type {
   Adicional,
@@ -89,7 +81,7 @@ export function CardapioEntrega({
 
   // --- memória do celular -------------------------------------------------
   useEffect(() => {
-    setItens(ler<ItemCarrinho[]>(CHAVE_CARRINHO, []));
+    setItens(curarCarrinho(ler<ItemCarrinho[]>(CHAVE_CARRINHO, [])));
     const guardado = ler<DadosCliente | null>(CHAVE_CLIENTE, null);
     if (guardado && dadosServem(guardado)) {
       setCliente(guardado);

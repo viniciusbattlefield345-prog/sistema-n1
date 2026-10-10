@@ -8,7 +8,7 @@ import { ItensCarrinho } from "@/components/cardapio/ItensCarrinho";
 import { ListaCardapio } from "@/components/cardapio/ListaCardapio";
 import { MeusPedidos } from "@/components/cardapio/MeusPedidos";
 import { consultarPedidos, enviarPedido, type SituacaoPedido } from "./acoes";
-import { numeroPedido, reais, subtotalCarrinho } from "@/lib/formato";
+import { curarCarrinho, numeroPedido, reais, subtotalCarrinho } from "@/lib/formato";
 import { gravar, ler } from "@/lib/memoria";
 import type { Adicional, Categoria, ItemCarrinho, Produto, StatusPedido } from "@/lib/tipos";
 
@@ -67,7 +67,7 @@ export function CardapioMesa({
 
   // --- memória do celular -------------------------------------------------
   useEffect(() => {
-    setItens(ler<ItemCarrinho[]>(chaveCarrinho, []));
+    setItens(curarCarrinho(ler<ItemCarrinho[]>(chaveCarrinho, [])));
     const guardado = ler("gb:nome", "");
     setNome(guardado);
     // O nome vale pelo turno: 12h depois, quem está nesta mesa é outra pessoa.

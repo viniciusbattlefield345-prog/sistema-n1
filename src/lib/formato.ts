@@ -115,6 +115,23 @@ export function extraComVezes(a: { nome: string; quantidade: number }): string {
   return vezes > 1 ? `${vezes}x ${a.nome}` : a.nome;
 }
 
+/**
+ * Conserta carrinho guardado no navegador antes da quantidade por adicional
+ * existir: aqueles itens vêm sem o campo, e `preço × undefined` é NaN — a
+ * conta apareceria quebrada por causa de um carrinho de ontem, do lado do
+ * cliente e do atendente. Adicional sem número vale um.
+ */
+export function curarCarrinho(itens: ItemCarrinho[]): ItemCarrinho[] {
+  if (!Array.isArray(itens)) return [];
+  return itens.map((i) => ({
+    ...i,
+    adicionais: (i.adicionais ?? []).map((a) => {
+      const vezes = Math.trunc(Number(a.quantidade));
+      return { ...a, quantidade: Number.isFinite(vezes) && vezes > 0 ? vezes : 1 };
+    }),
+  }));
+}
+
 export function subtotalCarrinho(itens: ItemCarrinho[]): number {
   return itens.reduce((s, i) => s + totalItem(i), 0);
 }

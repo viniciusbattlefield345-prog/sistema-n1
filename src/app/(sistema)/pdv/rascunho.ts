@@ -1,3 +1,4 @@
+import { curarCarrinho } from "@/lib/formato";
 import type { FormaPagamento, ItemCarrinho, TipoPedido } from "@/lib/tipos";
 
 /**
@@ -29,7 +30,7 @@ export function lerRascunho(): Rascunho | null {
     const r = JSON.parse(bruto) as Rascunho;
     // Rascunho sem item não vale a pena restaurar.
     if (!Array.isArray(r.itens) || r.itens.length === 0) return null;
-    return r;
+    return { ...r, itens: curarCarrinho(r.itens) };
   } catch {
     return null; // json corrompido ou navegador sem armazenamento
   }

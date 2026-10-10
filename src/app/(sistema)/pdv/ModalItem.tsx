@@ -29,7 +29,14 @@ export function ModalItem({
   const [variacaoId, setVariacaoId] = useState<number | null>(
     variacoes.length > 0 ? variacoes[0].id : null,
   );
-  const [escolhidos, setEscolhidos] = useState<number[]>([]);
+  const [quantidades, setQuantidades] = useState<Record<number, number>>({});
+
+  /** Soma ou tira um do adicional, entre 0 e 10. */
+  const mudar = (id: number, passo: number) =>
+    setQuantidades((atual) => ({
+      ...atual,
+      [id]: Math.max(0, Math.min(10, (atual[id] ?? 0) + passo)),
+    }));
   const [quantidade, setQuantidade] = useState(1);
   const [observacao, setObservacao] = useState("");
 
@@ -55,8 +62,12 @@ export function ModalItem({
 
   const variacao = variacoes.find((v) => v.id === variacaoId) ?? null;
   const precoUnitario = Number(variacao ? variacao.preco : produto.preco_base);
-  const extras = extrasDisponiveis.filter((a) => escolhidos.includes(a.id));
-  const total = (precoUnitario + extras.reduce((s, a) => s + Number(a.preco), 0)) * quantidade;
+  const extras = extrasDisponiveis
+    .map((a) => ({ extra: a, vezes: quantidades[a.id] ?? 0 }))
+    .filter((e) => e.vezes > 0);
+  const total =
+    (precoUnitario + extras.reduce((s, e) => s + Number(e.extra.preco) * e.vezes, 0)) *
+    quantidade;
 
   function confirmar() {
     aoAdicionar({
@@ -68,13 +79,11 @@ export function ModalItem({
       preco_unitario: precoUnitario,
       quantidade,
       observacao,
-      // O PDV ainda marca uma unidade por adicional. A quantidade existe no
-      // item desde agora; quem repete hoje e o cliente, pelo QR.
-      adicionais: extras.map((a) => ({
-        adicional_id: a.id,
-        nome: a.nome,
-        preco: Number(a.preco),
-        quantidade: 1,
+      adicionais: extras.map((e) => ({
+        adicional_id: e.extra.id,
+        nome: e.extra.nome,
+        preco: Number(e.extra.preco),
+        quantidade: e.vezes,
       })),
     });
   }
@@ -138,40 +147,56 @@ export function ModalItem({
               <legend className="rotulo">{grupo}</legend>
               <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
                 {itens.map((a) => {
-                  const marcado = escolhidos.includes(a.id);
+                  const vezes = quantidades[a.id] ?? 0;
                   const custa = Number(a.preco) > 0;
                   return (
-                    <label
+                    <div
                       key={a.id}
                       className={
-                        "flex cursor-pointer items-center justify-between gap-1.5 rounded-lg border px-2.5 py-2.5 text-sm transition-colors " +
-                        (marcado
+                        "flex items-stretch justify-between rounded-lg border text-sm transition-colors " +
+                        (vezes > 0
                           ? "border-ouro bg-ouro/15 text-creme"
                           : "border-borda text-creme-suave hover:border-borda-forte")
                       }
                     >
-                      <span className="flex min-w-0 items-center gap-2">
-                        <input
-                          type="checkbox"
-                          className="accent-ouro"
-                          checked={marcado}
-                          onChange={() =>
-                            setEscolhidos((atual) =>
-                              marcado
-                                ? atual.filter((id) => id !== a.id)
-                                : [...atual, a.id],
-                            )
-                          }
-                        />
-                        <span className="truncate">{a.nome}</span>
-                      </span>
-                      {/* adicional gratis: mostrar "+0,00" seria ruido */}
-                      {custa && (
-                        <span className="tabular shrink-0 text-xs">
-                          +{numero(Number(a.preco))}
+                      {/*
+                        O corpo inteiro soma mais um. No balcao tem fila
+                        esperando: quem quer um adicional so da um toque, como
+                        sempre deu, e quem quer dois da dois. O "-" so nasce
+                        quando ja tem algo pra tirar, pra nao virar ruido.
+                      */}
+                      <button
+                        type="button"
+                        onClick={() => mudar(a.id, 1)}
+                        aria-label={`Mais um ${a.nome}`}
+                        className="flex min-w-0 flex-1 items-center justify-between gap-1.5 px-2.5 py-2.5 text-left"
+                      >
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          {vezes > 0 && (
+                            <span className="tabular shrink-0 rounded bg-ouro px-1.5 py-0.5 text-xs font-bold text-breu">
+                              {vezes}x
+                            </span>
+                          )}
+                          <span className="truncate">{a.nome}</span>
                         </span>
+                        {/* adicional gratis: mostrar "+0,00" seria ruido */}
+                        {custa && (
+                          <span className="tabular shrink-0 text-xs">
+                            +{numero(Number(a.preco))}
+                          </span>
+                        )}
+                      </button>
+                      {vezes > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => mudar(a.id, -1)}
+                          aria-label={`Tirar um ${a.nome}`}
+                          className="shrink-0 border-l border-ouro/40 px-3 text-base font-bold leading-none text-creme"
+                        >
+                          −
+                        </button>
                       )}
-                    </label>
+                    </div>
                   );
                 })}
               </div>
