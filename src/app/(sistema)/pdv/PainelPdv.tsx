@@ -656,6 +656,8 @@ export function PainelPdv({
       {produtoAberto && (
         <ModalItem
           produto={produtoAberto}
+          produtos={produtos}
+          categorias={categorias}
           adicionais={adicionais}
           aoFechar={() => setProdutoAberto(null)}
           aoAdicionar={adicionar}

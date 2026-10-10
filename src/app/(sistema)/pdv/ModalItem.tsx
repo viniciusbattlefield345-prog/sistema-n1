@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { numero, reais } from "@/lib/formato";
-import type { Adicional, ItemCarrinho, Produto } from "@/lib/tipos";
+import type { Adicional, Categoria, ItemCarrinho, Produto } from "@/lib/tipos";
 
 /**
  * Monta um item: tamanho, adicionais, quantidade e observacao.
@@ -11,11 +11,16 @@ import type { Adicional, ItemCarrinho, Produto } from "@/lib/tipos";
  */
 export function ModalItem({
   produto,
+  produtos,
+  categorias,
   adicionais,
   aoFechar,
   aoAdicionar,
 }: {
   produto: Produto;
+  /** O cardapio inteiro: e dele que saem os sabores da outra metade. */
+  produtos: Produto[];
+  categorias: Categoria[];
   adicionais: Adicional[];
   aoFechar: () => void;
   aoAdicionar: (item: ItemCarrinho) => void;
@@ -30,6 +35,19 @@ export function ModalItem({
     variacoes.length > 0 ? variacoes[0].id : null,
   );
   const [quantidades, setQuantidades] = useState<Record<number, number>>({});
+  const [segundoId, setSegundoId] = useState<number | null>(null);
+
+  /**
+   * Meia a meia no balcao: a mesma regra do cardapio do cliente, porque e o
+   * mesmo pedido. So aparece em categoria marcada pra isso (hoje, Pizzas).
+   */
+  const categoria = categorias.find((c) => c.id === produto.categoria_id) ?? null;
+  const sabores = categoria?.meio_a_meio
+    ? produtos.filter(
+        (p) =>
+          p.categoria_id === produto.categoria_id && p.id !== produto.id && p.ativo && p.disponivel,
+      )
+    : [];
 
   /** Soma ou tira um do adicional, entre 0 e 10. */
   const mudar = (id: number, passo: number) =>
@@ -61,7 +79,14 @@ export function ModalItem({
   }, [aoFechar]);
 
   const variacao = variacoes.find((v) => v.id === variacaoId) ?? null;
-  const precoUnitario = Number(variacao ? variacao.preco : produto.preco_base);
+  const segundo = sabores.find((s) => s.id === segundoId) ?? null;
+  const precoSozinho = Number(variacao ? variacao.preco : produto.preco_base);
+  // Vale o sabor mais caro dos dois. Quem confere e o servidor; aqui e so pra
+  // o atendente ver na tela o mesmo valor que vai sair na comanda.
+  const precoUnitario = segundo
+    ? Math.max(precoSozinho, Number(segundo.preco_base))
+    : precoSozinho;
+  const nomeItem = segundo ? `1/2 ${produto.nome} + 1/2 ${segundo.nome}` : produto.nome;
   const extras = extrasDisponiveis
     .map((a) => ({ extra: a, vezes: quantidades[a.id] ?? 0 }))
     .filter((e) => e.vezes > 0);
@@ -73,7 +98,8 @@ export function ModalItem({
     aoAdicionar({
       chave: crypto.randomUUID(),
       produto_id: produto.id,
-      produto_nome: produto.nome,
+      produto_nome: nomeItem,
+      segundo_produto_id: segundo?.id ?? null,
       variacao_id: variacao?.id ?? null,
       variacao_nome: variacao?.nome ?? null,
       preco_unitario: precoUnitario,
@@ -137,6 +163,47 @@ export function ModalItem({
                     </span>
                     <span className="tabular font-medium">{reais(Number(v.preco))}</span>
                   </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
+
+          {sabores.length > 0 && (
+            <fieldset className="mb-5">
+              <legend className="rotulo">Outra metade</legend>
+              <p className="mb-1.5 text-xs text-creme-fraco">
+                Vale o preço do sabor mais caro dos dois.
+              </p>
+              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                <button
+                  type="button"
+                  onClick={() => setSegundoId(null)}
+                  className={
+                    "rounded-lg border px-2.5 py-2.5 text-left text-sm transition-colors " +
+                    (segundo === null
+                      ? "border-ouro bg-ouro/15 text-creme"
+                      : "border-borda text-creme-suave hover:border-borda-forte")
+                  }
+                >
+                  Inteira
+                </button>
+                {sabores.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setSegundoId(segundoId === s.id ? null : s.id)}
+                    className={
+                      "flex items-center justify-between gap-1.5 rounded-lg border px-2.5 py-2.5 text-left text-sm transition-colors " +
+                      (segundoId === s.id
+                        ? "border-ouro bg-ouro/15 text-creme"
+                        : "border-borda text-creme-suave hover:border-borda-forte")
+                    }
+                  >
+                    <span className="truncate">1/2 {s.nome}</span>
+                    <span className="tabular shrink-0 text-xs">
+                      {numero(Math.max(precoSozinho, Number(s.preco_base)))}
+                    </span>
+                  </button>
                 ))}
               </div>
             </fieldset>
