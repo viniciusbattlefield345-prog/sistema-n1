@@ -131,15 +131,23 @@ if (Test-Path $cfg) {
   Bom "Entrada por senha desligada (so a chave)."
 }
 
-Restart-Service sshd
+Restart-Service sshd -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 2
 if ((Get-Service sshd).Status -eq "Running") {
   Bom "sshd reiniciado e no ar."
 } else {
-  Ruim "O sshd nao voltou. Devolvendo a configuracao anterior..."
+  # Config recusada: melhor voltar pro que funcionava do que deixar o PC
+  # sem SSH nenhum. Senha volta a valer, mas a porta so abre no Tailscale.
+  Atencao "O sshd nao voltou. Devolvendo a configuracao anterior..."
   if (Test-Path "$cfg.antes-do-general-burguer") {
     Copy-Item "$cfg.antes-do-general-burguer" $cfg -Force
-    Restart-Service sshd
+    Start-Service sshd -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+  }
+  if ((Get-Service sshd).Status -eq "Running") {
+    Atencao "Voltou com a configuracao antiga. Avise o Vinicius."
+  } else {
+    Ruim "sshd fora do ar. Manda print desta tela pro Vinicius."
   }
 }
 
