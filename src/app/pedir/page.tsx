@@ -33,7 +33,7 @@ export default async function PaginaPedir() {
     sb.from("caixas").select("id").eq("status", "ABERTO").maybeSingle(),
     sb
       .from("categorias")
-      .select("id, nome, descricao, ordem, ativo")
+      .select("id, nome, descricao, ordem, ativo, meio_a_meio")
       .eq("ativo", true)
       .order("ordem")
       .order("nome"),

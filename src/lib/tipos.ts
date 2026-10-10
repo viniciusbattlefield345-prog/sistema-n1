@@ -35,6 +35,8 @@ export interface Categoria {
   descricao: string | null;
   ordem: number;
   ativo: boolean;
+  /** Pizza: os produtos desta categoria podem sair meia a meia. */
+  meio_a_meio?: boolean;
 }
 
 export interface Variacao {
@@ -210,6 +212,8 @@ export interface ItemCarrinho {
   produto_nome: string;
   variacao_id: number | null;
   variacao_nome: string | null;
+  /** Meia a meia: o sabor da outra metade. Null = pizza inteira. */
+  segundo_produto_id?: number | null;
   preco_unitario: number; // produto ou variacao, sem adicionais
   quantidade: number;
   observacao: string;

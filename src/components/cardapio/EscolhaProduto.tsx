@@ -5,7 +5,7 @@ import { Folha } from "./Folha";
 import { Foto } from "./Foto";
 import { Passo } from "./Passo";
 import { reais } from "@/lib/formato";
-import type { Adicional, ItemCarrinho, Produto } from "@/lib/tipos";
+import type { Adicional, Categoria, ItemCarrinho, Produto } from "@/lib/tipos";
 
 /**
  * A folha que abre quando o cliente toca num produto: tamanho, adicionais,
@@ -14,6 +14,8 @@ import type { Adicional, ItemCarrinho, Produto } from "@/lib/tipos";
  */
 export function EscolhaProduto({
   produto,
+  produtos,
+  categorias,
   adicionais,
   lojaAberta,
   saindo,
@@ -21,6 +23,9 @@ export function EscolhaProduto({
   aoAdicionar,
 }: {
   produto: Produto;
+  /** O cardapio inteiro: e dele que saem os sabores da outra metade. */
+  produtos: Produto[];
+  categorias: Categoria[];
   adicionais: Adicional[];
   lojaAberta: boolean;
   saindo: boolean;
@@ -28,16 +33,38 @@ export function EscolhaProduto({
   aoAdicionar: (item: ItemCarrinho) => void;
 }) {
   const variacoes = produto.produto_variacoes ?? [];
+
+  /**
+   * Meia a meia so existe onde a categoria permite — hoje, Pizzas. Fora dela
+   * a pergunta nem aparece, pra nao atrapalhar quem esta pedindo um lanche.
+   */
+  const categoria = categorias.find((c) => c.id === produto.categoria_id) ?? null;
+  const sabores = categoria?.meio_a_meio
+    ? produtos.filter(
+        (p) => p.categoria_id === produto.categoria_id && p.id !== produto.id && p.ativo && p.disponivel,
+      )
+    : [];
   const permitidos = new Set((produto.produto_adicionais ?? []).map((p) => p.adicional_id));
   const extras = adicionais.filter((a) => permitidos.has(a.id));
 
   const [variacaoId, setVariacaoId] = useState<number | null>(variacoes[0]?.id ?? null);
+  const [segundoId, setSegundoId] = useState<number | null>(null);
   const [escolhidos, setEscolhidos] = useState<number[]>([]);
   const [quantidade, setQuantidade] = useState(1);
   const [observacao, setObservacao] = useState("");
 
   const variacao = variacoes.find((v) => v.id === variacaoId) ?? null;
-  const precoUnitario = Number(variacao ? variacao.preco : produto.preco_base);
+  const segundo = sabores.find((s) => s.id === segundoId) ?? null;
+  const precoSozinho = Number(variacao ? variacao.preco : produto.preco_base);
+  /**
+   * Meia a meia vale o sabor mais caro dos dois. Quem decide isso de verdade
+   * e o servidor, que rele o cardapio no banco; aqui e so pra tela nao
+   * mostrar um valor e o pedido sair com outro.
+   */
+  const precoUnitario = segundo
+    ? Math.max(precoSozinho, Number(segundo.preco_base))
+    : precoSozinho;
+  const nomeItem = segundo ? `1/2 ${produto.nome} + 1/2 ${segundo.nome}` : produto.nome;
   const marcados = extras.filter((a) => escolhidos.includes(a.id));
   const total =
     (precoUnitario + marcados.reduce((s, a) => s + Number(a.preco), 0)) * quantidade;
@@ -46,7 +73,8 @@ export function EscolhaProduto({
     aoAdicionar({
       chave: crypto.randomUUID(),
       produto_id: produto.id,
-      produto_nome: produto.nome,
+      produto_nome: nomeItem,
+      segundo_produto_id: segundo?.id ?? null,
       variacao_id: variacao?.id ?? null,
       variacao_nome: variacao?.nome ?? null,
       preco_unitario: precoUnitario,
@@ -101,6 +129,49 @@ export function EscolhaProduto({
                     </span>
                     <span className="tabular text-sm text-creme-suave">
                       {reais(Number(v.preco))}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          </div>
+        )}
+
+        {sabores.length > 0 && (
+          <div className="px-5 pt-5">
+            <fieldset>
+              <legend className="rotulo">Quer a outra metade de outro sabor?</legend>
+              <p className="mb-2 text-xs text-creme-fraco">
+                Sai meia a meia. Vale o preço do sabor mais caro dos dois.
+              </p>
+              <div className="divide-y divide-borda overflow-hidden rounded-2xl border border-borda">
+                <label className="flex cursor-pointer items-center gap-3 px-4 py-3.5 text-sm">
+                  <input
+                    type="radio"
+                    name="segundo-sabor"
+                    className="size-5 accent-ouro"
+                    checked={segundoId === null}
+                    onChange={() => setSegundoId(null)}
+                  />
+                  Inteira de {produto.nome}
+                </label>
+                {sabores.map((s) => (
+                  <label
+                    key={s.id}
+                    className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3.5"
+                  >
+                    <span className="flex items-center gap-3 text-sm">
+                      <input
+                        type="radio"
+                        name="segundo-sabor"
+                        className="size-5 accent-ouro"
+                        checked={segundoId === s.id}
+                        onChange={() => setSegundoId(s.id)}
+                      />
+                      1/2 {s.nome}
+                    </span>
+                    <span className="tabular text-sm text-creme-suave">
+                      {reais(Math.max(precoSozinho, Number(s.preco_base)))}
                     </span>
                   </label>
                 ))}

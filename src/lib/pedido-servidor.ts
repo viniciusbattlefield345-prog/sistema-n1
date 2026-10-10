@@ -11,6 +11,8 @@ import type { FormaPagamento, OrigemPedido, StatusPedido, TipoPedido } from "./t
 export interface ItemEnviado {
   produto_id: number;
   variacao_id: number | null;
+  /** Meia a meia: o sabor da outra metade. So o id — o preco e daqui. */
+  segundo_produto_id?: number | null;
   quantidade: number;
   observacao: string;
   adicionais: number[]; // ids
@@ -19,6 +21,7 @@ export interface ItemEnviado {
 export interface ItemMontado {
   produto_id: number;
   variacao_id: number | null;
+  segundo_produto_id: number | null;
   produto_nome: string;
   variacao_nome: string | null;
   quantidade: number;
@@ -49,7 +52,19 @@ export async function montarItens(
   if (enviados.length > MAX_ITENS)
     return { ok: false, erro: "Pedido grande demais. Divida em dois." };
 
-  const idsProduto = [...new Set(enviados.map((i) => Number(i.produto_id)))];
+  // O segundo sabor entra na mesma busca: e produto igual aos outros.
+  const idsProduto = [
+    ...new Set(
+      enviados.flatMap((i) =>
+        i.segundo_produto_id === null || i.segundo_produto_id === undefined
+          ? [Number(i.produto_id)]
+          : [Number(i.produto_id), Number(i.segundo_produto_id)],
+      ),
+    ),
+  ];
+  const temMeia = enviados.some(
+    (i) => i.segundo_produto_id !== null && i.segundo_produto_id !== undefined,
+  );
   const idsVariacao = [
     ...new Set(
       enviados.map((i) => i.variacao_id).filter((v): v is number => v !== null && v !== undefined),
@@ -59,8 +74,11 @@ export async function montarItens(
     ...new Set(enviados.flatMap((i) => (Array.isArray(i.adicionais) ? i.adicionais : []))),
   ];
 
-  const [produtosRes, variacoesRes, adicionaisRes, ligacoesRes] = await Promise.all([
-    sb.from("produtos").select("id, nome, preco_base, ativo, disponivel").in("id", idsProduto),
+  const [produtosRes, variacoesRes, adicionaisRes, ligacoesRes, categoriasRes] = await Promise.all([
+    sb
+      .from("produtos")
+      .select("id, nome, categoria_id, preco_base, ativo, disponivel")
+      .in("id", idsProduto),
     idsVariacao.length
       ? sb.from("produto_variacoes").select("id, nome, preco, produto_id").in("id", idsVariacao)
       : Promise.resolve({ data: [], error: null }),
@@ -70,10 +88,18 @@ export async function montarItens(
     idsAdicional.length
       ? sb.from("produto_adicionais").select("produto_id, adicional_id").in("produto_id", idsProduto)
       : Promise.resolve({ data: [], error: null }),
+    // So custa uma consulta quando alguem realmente pediu meia a meia.
+    temMeia
+      ? sb.from("categorias").select("id").eq("meio_a_meio", true)
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   const erroLeitura =
-    produtosRes.error ?? variacoesRes.error ?? adicionaisRes.error ?? ligacoesRes.error;
+    produtosRes.error ??
+    variacoesRes.error ??
+    adicionaisRes.error ??
+    ligacoesRes.error ??
+    categoriasRes.error;
   if (erroLeitura) return { ok: false, erro: erroLeitura.message };
 
   const produtos = new Map((produtosRes.data ?? []).map((p) => [p.id, p]));
@@ -82,6 +108,7 @@ export async function montarItens(
   const ligados = new Set(
     (ligacoesRes.data ?? []).map((l) => `${l.produto_id}:${l.adicional_id}`),
   );
+  const categoriasMeias = new Set((categoriasRes.data ?? []).map((c) => c.id));
 
   const itens: ItemMontado[] = [];
   for (const enviado of enviados) {
@@ -98,6 +125,36 @@ export async function montarItens(
         return { ok: false, erro: "Um dos tamanhos saiu do cardápio. Refaça o item." };
       variacao = v;
     }
+
+    /**
+     * Meia a meia. O celular diz quais dois sabores; o preco sai daqui.
+     *
+     * Vale o mais caro dos dois. Se valesse o da metade barata, bastaria
+     * pedir toda pizza cara em dupla com a mais barata do cardapio pra
+     * pagar menos — a casa perderia em todo pedido misto.
+     */
+    let segundo: { id: number; nome: string; preco_base: number } | null = null;
+    const idSegundo = enviado.segundo_produto_id;
+    if (idSegundo !== null && idSegundo !== undefined) {
+      const s = produtos.get(Number(idSegundo));
+      if (!s) return { ok: false, erro: "O segundo sabor saiu do cardápio. Refaça o item." };
+      if (s.id === produto.id)
+        return { ok: false, erro: "Os dois sabores são o mesmo. Escolha outro, ou peça inteira." };
+      if (produto.categoria_id === null || s.categoria_id !== produto.categoria_id)
+        return { ok: false, erro: "Os dois sabores têm que ser da mesma categoria." };
+      if (!categoriasMeias.has(produto.categoria_id))
+        return { ok: false, erro: `${produto.nome} não sai meia a meia.` };
+      if (rigoroso && (!s.ativo || !s.disponivel))
+        return { ok: false, erro: `${s.nome} acabou por hoje. Escolha outro sabor.` };
+      segundo = s;
+    }
+
+    const precoSozinho = Number(variacao ? variacao.preco : produto.preco_base);
+    const precoUnitario = segundo
+      ? Math.max(precoSozinho, Number(segundo.preco_base))
+      : precoSozinho;
+    // O nome ja vai montado: e ele que a cozinha le no cupom e na tela.
+    const nomeItem = segundo ? `1/2 ${produto.nome} + 1/2 ${segundo.nome}` : produto.nome;
 
     const quantidade = Number(enviado.quantidade);
     const quantidadeValida = rigoroso
@@ -117,10 +174,11 @@ export async function montarItens(
     itens.push({
       produto_id: produto.id,
       variacao_id: variacao?.id ?? null,
-      produto_nome: produto.nome,
+      segundo_produto_id: segundo?.id ?? null,
+      produto_nome: nomeItem,
       variacao_nome: variacao?.nome ?? null,
       quantidade,
-      preco_unitario: Number(variacao ? variacao.preco : produto.preco_base),
+      preco_unitario: precoUnitario,
       observacao: String(enviado.observacao ?? "").trim().slice(0, 140) || null,
       adicionais,
     });
@@ -176,6 +234,7 @@ export async function gravarPedido(
         pedido_id: pedido.id,
         produto_id: i.produto_id,
         variacao_id: i.variacao_id,
+        segundo_produto_id: i.segundo_produto_id,
         produto_nome: i.produto_nome,
         variacao_nome: i.variacao_nome,
         quantidade: i.quantidade,

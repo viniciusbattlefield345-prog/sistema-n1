@@ -179,6 +179,7 @@ export function CardapioMesa({
           observacao,
           itens: itens.map((i) => ({
             produto_id: i.produto_id,
+            segundo_produto_id: i.segundo_produto_id ?? null,
             variacao_id: i.variacao_id,
             quantidade: i.quantidade,
             observacao: i.observacao,
@@ -392,6 +393,8 @@ export function CardapioMesa({
       {escolhendo && (
         <EscolhaProduto
           produto={escolhendo}
+          produtos={produtos}
+          categorias={categorias}
           adicionais={adicionais}
           lojaAberta={lojaAberta}
           saindo={saindo === "escolha"}

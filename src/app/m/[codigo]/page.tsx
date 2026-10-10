@@ -39,7 +39,7 @@ export default async function PaginaMesa({ params }: PageProps<"/m/[codigo]">) {
     sb.from("caixas").select("id").eq("status", "ABERTO").maybeSingle(),
     sb
       .from("categorias")
-      .select("id, nome, descricao, ordem, ativo")
+      .select("id, nome, descricao, ordem, ativo, meio_a_meio")
       .eq("ativo", true)
       .order("ordem")
       .order("nome"),
