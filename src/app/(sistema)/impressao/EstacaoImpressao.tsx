@@ -25,7 +25,7 @@ import type {
 /**
  * A tela que fica aberta no computador da impressora.
  *
- * Ela vigia a fila (tempo real + conferência a cada 15s), pega um cupom por
+ * Ela vigia a fila (tempo real + conferência a cada 5s), pega um cupom por
  * vez, monta o ESC/POS com os dados frescos do banco e manda pro QZ Tray.
  * A "pegada" é atômica (status PENDENTE -> IMPRIMINDO numa condição só):
  * duas abas abertas não imprimem o mesmo cupom duas vezes.
@@ -221,22 +221,62 @@ export function EstacaoImpressao({
       .lt("atualizado_em", doisMinutosAtras)
       .then(() => carregarFila());
 
-    const canal = supabase
-      .channel(`estacao-${Math.random().toString(36).slice(2)}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "fila_impressao" }, () => {
-        void processar();
-        void carregarFila();
-      })
-      .subscribe();
-
-    const relogio = setInterval(() => {
-      if (qzAtual.current === "desligado") void ligarQz(true);
+    // Uma batida: garante o QZ e processa a fila. Nunca "pula a vez" —
+    // ligarQz, quando dá certo, já chama processar no fim.
+    const bater = () => {
+      if (qzAtual.current !== "ligado") void ligarQz(true);
       else void processar();
-    }, 15000);
+    };
+
+    // A internet do balcão oscila (e no começo veio de celular por USB).
+    // Quando o socket do tempo real morre, o canal fica mudo e a tela
+    // continua parecendo viva: o cupom só sai no relógio de reserva, ou
+    // quando alguém abre a janela. Por isso a assinatura se refaz sozinha.
+    let canal: ReturnType<typeof supabase.channel> | null = null;
+    let remarcando: ReturnType<typeof setTimeout> | null = null;
+
+    const assinar = () => {
+      canal = supabase
+        .channel(`estacao-${Math.random().toString(36).slice(2)}`)
+        .on("postgres_changes", { event: "*", schema: "public", table: "fila_impressao" }, () => {
+          void processar();
+          void carregarFila();
+        })
+        .subscribe((estado) => {
+          if (estado === "CHANNEL_ERROR" || estado === "TIMED_OUT" || estado === "CLOSED") {
+            if (remarcando) return;
+            remarcando = setTimeout(() => {
+              remarcando = null;
+              const morto = canal;
+              canal = null;
+              if (morto) void supabase.removeChannel(morto);
+              assinar();
+              bater();
+            }, 3000);
+          }
+        });
+    };
+    assinar();
+
+    // 5 segundos, não 15. Este relógio é o que segura a operação quando o
+    // tempo real falha, e 15s já deixou um pedido esperando 28s pra sair.
+    // Uma consulta a cada 5 segundos é barata; cupom parado no sábado não.
+    const relogio = setInterval(bater, 5000);
+
+    // Voltar a enxergar a janela, ou a internet voltar, são dois momentos
+    // em que vale conferir na hora em vez de esperar o próximo relógio.
+    const aoAcordar = () => {
+      if (document.visibilityState === "visible") bater();
+    };
+    document.addEventListener("visibilitychange", aoAcordar);
+    window.addEventListener("online", bater);
 
     return () => {
       clearInterval(relogio);
-      void supabase.removeChannel(canal);
+      if (remarcando) clearTimeout(remarcando);
+      document.removeEventListener("visibilitychange", aoAcordar);
+      window.removeEventListener("online", bater);
+      if (canal) void supabase.removeChannel(canal);
     };
   }, [supabase, carregarFila, ligarQz, processar]);
 
