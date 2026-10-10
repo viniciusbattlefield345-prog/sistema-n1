@@ -184,8 +184,11 @@ try { $ip = (& $TAILSCALE ip -4 2>$null | Select-Object -First 1) } catch {}
 if ([string]::IsNullOrWhiteSpace($ip)) {
   Write-Host ""
   Write-Host "  >>> VAI ABRIR O NAVEGADOR PRA VOCE FAZER LOGIN." -ForegroundColor Yellow
-  Write-Host "  >>> Entre com a MESMA conta que voce usou no outro PC" -ForegroundColor Yellow
-  Write-Host "  >>> (o Google do viniciusbattlefield345@gmail.com)." -ForegroundColor Yellow
+  # Conta errada aqui = os dois PCs entram em redes diferentes e NUNCA se
+  # enxergam, sem dar erro nenhum. Esta e a rede onde o PC do suporte esta.
+  Write-Host "  >>> Entre com o Google   viniciuscacador2@gmail.com" -ForegroundColor Yellow
+  Write-Host "  >>> Tem que ser ESSA conta. Se entrar com outra, este PC cai" -ForegroundColor Yellow
+  Write-Host "  >>> numa rede separada e o suporte nao alcanca ele." -ForegroundColor Yellow
   Write-Host ""
   # --unattended: o Tailscale sobe mesmo antes de alguem logar no Windows.
   Start-Process -FilePath $TAILSCALE -ArgumentList "up","--unattended" -NoNewWindow
