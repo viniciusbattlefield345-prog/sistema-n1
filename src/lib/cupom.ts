@@ -8,7 +8,13 @@ import {
   rotuloPedido,
   telefone,
 } from "./formato";
-import type { Comanda, ConfigImpressoras, ConfigRestaurante, ItemPedido, Pedido } from "./tipos";
+import type {
+  Comanda,
+  ConfigImpressoras,
+  ConfigRestaurante,
+  ItemPedido,
+  Pedido,
+} from "./tipos";
 
 const dia = (iso: string) =>
   new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
@@ -69,6 +75,17 @@ function listaDeItensCozinha(c: Cupom, itens: ItemPedido[]) {
  * custa — precisa enxergar o que montar de longe, com a mão ocupada. Por isso
  * o item vai em letra dobrada e o resto é enxuto.
  */
+/**
+ * O que a chapa tem a fazer deste pedido. Bebida fica de fora: ela sai da
+ * geladeira, e um papel a mais na cozinha e um papel que atrapalha.
+ *
+ * Item antigo, gravado antes desta regra existir, vem sem o campo e conta
+ * como cozinha — era assim que ele era impresso quando foi feito.
+ */
+function itensDaCozinha(pedido: Pedido): ItemPedido[] {
+  return (pedido.itens_pedido ?? []).filter((i) => i.vai_pra_cozinha !== false);
+}
+
 function corpoCozinha(c: Cupom, pedido: Pedido) {
   c.alinhar(1).negrito(true).tamanho(2).linha("COZINHA");
   c.tamanho(3).linha(rotuloPedido(pedido).toUpperCase());
@@ -76,7 +93,7 @@ function corpoCozinha(c: Cupom, pedido: Pedido) {
   c.tamanho(1).negrito(false).linha(hora(pedido.criado_em));
   c.alinhar(0).separador("=");
 
-  listaDeItensCozinha(c, pedido.itens_pedido ?? []);
+  listaDeItensCozinha(c, itensDaCozinha(pedido));
 
   if (pedido.observacao) {
     c.separador();
@@ -158,8 +175,16 @@ export function viaPedido(
   const c = new Cupom(cfg.colunas);
   // Desligar as duas seria papel em branco: sobra a do caixa, que tem o total.
   const caixa = cfg.via_caixa || !cfg.via_cozinha;
+  const temCozinha = itensDaCozinha(pedido).length > 0;
 
-  if (cfg.via_cozinha) {
+  /**
+   * Pedido so de bebida, com a via do caixa desligada: nao ha o que imprimir.
+   * Devolver vazio e a forma de dizer "nao gaste papel" — a estacao entende
+   * e marca como impresso sem acionar a impressora.
+   */
+  if (!temCozinha && !caixa) return "";
+
+  if (cfg.via_cozinha && temCozinha) {
     corpoCozinha(c, pedido);
     if (cfg.cortar) c.cortar();
     else c.pular(3);

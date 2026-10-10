@@ -154,7 +154,11 @@ export function EstacaoImpressao({
 
           try {
             const base64 = await montar(proximo as TrabalhoImpressao);
-            await imprimirCru(cfgAtual.current.impressora, base64, cfgAtual.current.vias);
+            // Vazio = nao ha o que imprimir (pedido so de bebida, sem via de
+            // caixa). Sai da fila como impresso, sem acordar a impressora.
+            if (base64) {
+              await imprimirCru(cfgAtual.current.impressora, base64, cfgAtual.current.vias);
+            }
             await supabase
               .from("fila_impressao")
               .update({ status: "IMPRESSO", erro: null, atualizado_em: new Date().toISOString() })

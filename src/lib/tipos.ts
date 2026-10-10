@@ -37,6 +37,8 @@ export interface Categoria {
   ativo: boolean;
   /** Pizza: os produtos desta categoria podem sair meia a meia. */
   meio_a_meio?: boolean;
+  /** Bebida não: o que está aqui não aparece na comanda da cozinha. */
+  vai_pra_cozinha?: boolean;
 }
 
 export interface Variacao {
@@ -157,6 +159,13 @@ export interface ItemPedido {
   quantidade: number;
   preco_unitario: number;
   observacao: string | null;
+  /**
+   * Se este item tem algo a fazer na chapa. Bebida não tem: ela sai da
+   * geladeira e vai direto pra mesa. Fica gravado no item, e não lido da
+   * categoria na hora de imprimir, pra pedido de ontem não mudar de
+   * comportamento quando o cardápio for reorganizado amanhã.
+   */
+  vai_pra_cozinha?: boolean;
   item_adicionais?: ItemAdicional[];
 }
 

@@ -27,6 +27,7 @@ export interface ItemMontado {
   produto_id: number;
   variacao_id: number | null;
   segundo_produto_id: number | null;
+  vai_pra_cozinha: boolean;
   produto_nome: string;
   variacao_nome: string | null;
   quantidade: number;
@@ -74,9 +75,6 @@ export async function montarItens(
       ),
     ),
   ];
-  const temMeia = enviados.some(
-    (i) => i.segundo_produto_id !== null && i.segundo_produto_id !== undefined,
-  );
   const idsVariacao = [
     ...new Set(
       enviados.map((i) => i.variacao_id).filter((v): v is number => v !== null && v !== undefined),
@@ -102,10 +100,8 @@ export async function montarItens(
     idsAdicional.length
       ? sb.from("produto_adicionais").select("produto_id, adicional_id").in("produto_id", idsProduto)
       : Promise.resolve({ data: [], error: null }),
-    // So custa uma consulta quando alguem realmente pediu meia a meia.
-    temMeia
-      ? sb.from("categorias").select("id").eq("meio_a_meio", true)
-      : Promise.resolve({ data: [], error: null }),
+    // Sao cinco linhas e roda em paralelo com as outras: nao custa espera.
+    sb.from("categorias").select("id, meio_a_meio, vai_pra_cozinha"),
   ]);
 
   const erroLeitura =
@@ -122,7 +118,15 @@ export async function montarItens(
   const ligados = new Set(
     (ligacoesRes.data ?? []).map((l) => `${l.produto_id}:${l.adicional_id}`),
   );
-  const categoriasMeias = new Set((categoriasRes.data ?? []).map((c) => c.id));
+  const categorias = categoriasRes.data ?? [];
+  const categoriasMeias = new Set(
+    categorias.filter((c) => c.meio_a_meio).map((c) => c.id),
+  );
+  // Quem fica de fora da cozinha e a excecao, entao a lista e das excecoes:
+  // categoria nova nasce indo pra chapa, que e o caso comum.
+  const foraDaCozinha = new Set(
+    categorias.filter((c) => c.vai_pra_cozinha === false).map((c) => c.id),
+  );
 
   const itens: ItemMontado[] = [];
   for (const enviado of enviados) {
@@ -210,6 +214,8 @@ export async function montarItens(
       produto_id: produto.id,
       variacao_id: variacao?.id ?? null,
       segundo_produto_id: segundo?.id ?? null,
+      vai_pra_cozinha:
+        produto.categoria_id === null || !foraDaCozinha.has(produto.categoria_id),
       produto_nome: nomeItem,
       variacao_nome: variacao?.nome ?? null,
       quantidade,
@@ -270,6 +276,7 @@ export async function gravarPedido(
         produto_id: i.produto_id,
         variacao_id: i.variacao_id,
         segundo_produto_id: i.segundo_produto_id,
+        vai_pra_cozinha: i.vai_pra_cozinha,
         produto_nome: i.produto_nome,
         variacao_nome: i.variacao_nome,
         quantidade: i.quantidade,
