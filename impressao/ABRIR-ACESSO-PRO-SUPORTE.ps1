@@ -2,37 +2,60 @@
 #  GENERAL BURGUER - abrir acesso pro suporte
 #
 #  Rode UMA VEZ, no computador da lanchonete (o da impressora).
-#  Depois disso o suporte entra por aqui e configura o resto sozinho,
-#  de longe: QZ Tray, impressora, energia, teste de cupom.
+#  Depois disso o suporte entra por aqui e configura o resto de longe:
+#  QZ Tray, impressora, energia, teste de cupom.
 #
-#  O que ele faz:
-#    1. Instala o Tailscale  (rede privada, so entre os SEUS aparelhos)
-#    2. Liga o servidor SSH do Windows
-#    3. Autoriza UMA chave: a do PC do Vinicius. Mais ninguem entra.
-#    4. Fecha a porta 22 pra internet. So abre dentro do Tailscale.
+#  Ordem de proposito: o Tailscale vem PRIMEIRO porque e a parte que
+#  quase nunca falha. Assim, mesmo que o SSH de problema, o PC ja
+#  aparece pro suporte e da pra enxergar onde travou.
 #
 #  Sem acentos de proposito: PowerShell 5.1 quebra em UTF-8 sem BOM.
 # =====================================================================
 
-$ErrorActionPreference = "Stop"
+# Continue, e nao Stop: este script tem plano B e plano C em quase todo
+# passo. Morrer no primeiro tropeco e exatamente o que nao pode acontecer.
+$ErrorActionPreference = "Continue"
+$ProgressPreference = "SilentlyContinue"   # barra de download deixa o irm lento
 
 # Chave publica do PC do Vinicius (IT@TI). E so a METADE publica: com ela
-# ninguem entra em lugar nenhum, ela so reconhece quem tem a outra metade,
+# ninguem entra em lugar nenhum. Ela so reconhece quem tem a outra metade,
 # que nunca sai daquele PC.
 $CHAVE = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILdWBxL58Vbp8pglV7JitAW/1KDdZIpMQiZYC3xtmpI3 IT@TI"
 
+# A rede onde o PC do suporte esta. Conta errada nao da erro nenhum:
+# o PC entra numa rede separada, fica tudo verde, e os dois nunca se
+# enxergam. Por isso o nome esta escrito aqui.
+$CONTA = "viniciuscacador2@gmail.com"
+
 $TAILSCALE = "C:\Program Files\Tailscale\tailscale.exe"
-$RELATORIO = "$env:USERPROFILE\Desktop\GENERAL-BURGUER-acesso.txt"
+$AREA      = [Environment]::GetFolderPath("Desktop")
+$RELATORIO = Join-Path $AREA "GENERAL-BURGUER-acesso.txt"
+$LOG       = Join-Path $AREA "GENERAL-BURGUER-log.txt"
+$ZIP_SSH   = "https://github.com/PowerShell/Win32-OpenSSH/releases/download/10.0.0.0p2-Preview/OpenSSH-Win64.zip"
 
 # --- Precisa de administrador ------------------------------------------
 $eu = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
 if (-not $eu.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+  if ([string]::IsNullOrWhiteSpace($PSCommandPath)) {
+    Write-Host ""
+    Write-Host "  PRECISO DE ADMINISTRADOR." -ForegroundColor Red
+    Write-Host "  Feche esta janela. Clique com o botao DIREITO no menu Iniciar,"
+    Write-Host "  escolha 'Terminal (Administrador)', e cole o comando de novo."
+    Write-Host ""
+    Read-Host "  Enter pra fechar"
+    exit 1
+  }
   Write-Host "Pedindo permissao de administrador..." -ForegroundColor Yellow
+  # -NoExit: a janela que abre NAO pode sumir levando o erro junto.
   Start-Process powershell.exe -Verb RunAs -ArgumentList @(
-    "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$PSCommandPath`""
+    "-NoProfile", "-ExecutionPolicy", "Bypass", "-NoExit", "-File", "`"$PSCommandPath`""
   )
   exit
 }
+
+# Tudo que aparecer na tela fica gravado tambem. Se a janela fechar, o
+# erro nao se perde: esta no arquivo da Area de Trabalho.
+try { Start-Transcript -Path $LOG -Force | Out-Null } catch {}
 
 function Passo($n, $texto) { Write-Host ""; Write-Host "[$n] $texto" -ForegroundColor Cyan }
 function Bom($texto)       { Write-Host "      $texto" -ForegroundColor Green }
@@ -44,40 +67,153 @@ Write-Host "  GENERAL BURGUER - abrir acesso pro suporte" -ForegroundColor Cyan
 Write-Host "  ------------------------------------------"
 Write-Host "  PC: $env:COMPUTERNAME   Usuario: $env:USERNAME"
 
-# =====================================================================
-# 1. SERVIDOR SSH DO WINDOWS
-# =====================================================================
-Passo "1/5" "Ligando o servidor SSH do Windows..."
+$temInternet = Test-Connection -ComputerName "8.8.8.8" -Count 1 -Quiet -ErrorAction SilentlyContinue
+if (-not $temInternet) {
+  Atencao "Atencao: este PC parece estar SEM INTERNET. Quase tudo aqui"
+  Atencao "precisa baixar alguma coisa. Confira a rede antes de seguir."
+}
 
-if (-not (Get-Service sshd -ErrorAction SilentlyContinue)) {
-  $instalou = $false
-  try {
-    $cap = Get-WindowsCapability -Online -Name "OpenSSH.Server*" |
-           Select-Object -First 1
-    if ($cap -and $cap.State -ne "Installed") {
-      Add-WindowsCapability -Online -Name $cap.Name | Out-Null
-    }
-    $instalou = $null -ne (Get-Service sshd -ErrorAction SilentlyContinue)
-  } catch {
-    Atencao "O Windows Update recusou. Tentando pelo winget..."
+# =====================================================================
+# 1. TAILSCALE - a rede privada entre os seus aparelhos
+# =====================================================================
+Passo "1/5" "Instalando o Tailscale..."
+
+if (Test-Path $TAILSCALE) {
+  Bom "Tailscale ja esta instalado."
+} else {
+  if (Get-Command winget -ErrorAction SilentlyContinue) {
+    winget install --id Tailscale.Tailscale -e `
+      --accept-package-agreements --accept-source-agreements | Out-Host
+  } else {
+    Atencao "Sem winget neste PC. Baixando o instalador direto..."
   }
 
-  if (-not $instalou -and (Get-Command winget -ErrorAction SilentlyContinue)) {
-    winget install --id Microsoft.OpenSSH.Beta -e `
-      --accept-package-agreements --accept-source-agreements | Out-Host
+  # Plano B: baixar o MSI do site do Tailscale e instalar calado.
+  if (-not (Test-Path $TAILSCALE)) {
+    try {
+      $msi = Join-Path $env:TEMP "tailscale-setup.msi"
+      Invoke-WebRequest -Uri "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" `
+        -OutFile $msi -UseBasicParsing
+      Start-Process msiexec.exe -ArgumentList "/i","`"$msi`"","/quiet","/norestart" -Wait
+    } catch {
+      Ruim "Falhou o download do Tailscale: $($_.Exception.Message)"
+    }
+  }
+
+  if (Test-Path $TAILSCALE) {
+    Bom "Tailscale instalado."
+  } else {
+    Ruim "Nao consegui instalar o Tailscale de jeito nenhum."
+    Ruim "Baixe a mao em https://tailscale.com/download/windows"
+    Ruim "e rode este arquivo de novo."
+    try { Stop-Transcript | Out-Null } catch {}
+    Read-Host "  Enter pra fechar"
+    exit 1
   }
 }
 
-if (-not (Get-Service sshd -ErrorAction SilentlyContinue)) {
-  Ruim "Nao consegui instalar o servidor SSH neste PC."
-  Ruim "Manda print desta tela pro Vinicius."
+# =====================================================================
+# 2. ENTRAR NA REDE (aqui VOCE clica: tem que fazer login)
+# =====================================================================
+Passo "2/5" "Entrando na rede..."
+
+$ip = ""
+try { $ip = (& $TAILSCALE ip -4 2>$null | Select-Object -First 1) } catch {}
+
+if ([string]::IsNullOrWhiteSpace($ip)) {
+  Write-Host ""
+  Write-Host "  >>> VAI ABRIR O NAVEGADOR PRA VOCE FAZER LOGIN." -ForegroundColor Yellow
+  Write-Host "  >>> Entre com o Google   $CONTA" -ForegroundColor Yellow
+  Write-Host "  >>> Tem que ser ESSA conta. Com outra, este PC cai numa" -ForegroundColor Yellow
+  Write-Host "  >>> rede separada e o suporte nao alcanca ele." -ForegroundColor Yellow
+  Write-Host ""
+  # --unattended: o Tailscale sobe mesmo antes de alguem logar no Windows.
+  Start-Process -FilePath $TAILSCALE -ArgumentList "up","--unattended" -NoNewWindow
+  foreach ($tentativa in 1..60) {
+    Start-Sleep -Seconds 3
+    try { $ip = (& $TAILSCALE ip -4 2>$null | Select-Object -First 1) } catch {}
+    if (-not [string]::IsNullOrWhiteSpace($ip)) { break }
+    if ($tentativa % 5 -eq 0) { Write-Host "      esperando o login..." }
+  }
+}
+
+if ([string]::IsNullOrWhiteSpace($ip)) {
+  Atencao "Ainda nao entrou na rede. Clique no icone do Tailscale perto do"
+  Atencao "relogio, faca login com $CONTA, e rode este arquivo de novo."
+} else {
+  Bom "Na rede. Endereco deste PC: $ip"
+}
+
+# =====================================================================
+# 3. SERVIDOR SSH DO WINDOWS - com tres caminhos
+# =====================================================================
+Passo "3/5" "Ligando o servidor SSH do Windows..."
+
+function TemSshd { $null -ne (Get-Service sshd -ErrorAction SilentlyContinue) }
+
+if (TemSshd) {
+  Bom "Ja existe neste PC."
+} else {
+  # Caminho 1: recurso do proprio Windows. Depende do Windows Update, que
+  # e justamente o que costuma estar bloqueado ou quebrado.
+  Write-Host "      tentando pelo Windows (1 de 3)..."
+  try {
+    $cap = Get-WindowsCapability -Online -Name "OpenSSH.Server*" -ErrorAction Stop |
+           Select-Object -First 1
+    if ($cap -and $cap.State -ne "Installed") {
+      Add-WindowsCapability -Online -Name $cap.Name -ErrorAction Stop | Out-Null
+    }
+  } catch {
+    Atencao "o Windows recusou: $($_.Exception.Message)"
+  }
+
+  # Caminho 2: winget.
+  if (-not (TemSshd) -and (Get-Command winget -ErrorAction SilentlyContinue)) {
+    Write-Host "      tentando pelo winget (2 de 3)..."
+    winget install --id Microsoft.OpenSSH.Beta -e `
+      --accept-package-agreements --accept-source-agreements | Out-Host
+  }
+
+  # Caminho 3: o zip oficial da Microsoft. Nao depende de Windows Update
+  # nem de loja: e so baixar e descompactar.
+  if (-not (TemSshd)) {
+    Write-Host "      baixando o OpenSSH oficial da Microsoft (3 de 3)..."
+    try {
+      $zip = Join-Path $env:TEMP "OpenSSH-Win64.zip"
+      $tmp = Join-Path $env:TEMP "OpenSSH-extraido"
+      Invoke-WebRequest -Uri $ZIP_SSH -OutFile $zip -UseBasicParsing
+      if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
+      Expand-Archive -Path $zip -DestinationPath $tmp -Force
+      $origem = Join-Path $tmp "OpenSSH-Win64"
+      $destino = "C:\Program Files\OpenSSH"
+      if (-not (Test-Path $destino)) { New-Item -ItemType Directory -Path $destino -Force | Out-Null }
+      Copy-Item "$origem\*" $destino -Recurse -Force
+      & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$destino\install-sshd.ps1" | Out-Host
+      # O sshd precisa estar no PATH pra o resto do Windows achar ele.
+      $caminho = [Environment]::GetEnvironmentVariable("Path", "Machine")
+      if ($caminho -notlike "*$destino*") {
+        [Environment]::SetEnvironmentVariable("Path", "$caminho;$destino", "Machine")
+      }
+    } catch {
+      Ruim "falhou tambem: $($_.Exception.Message)"
+    }
+  }
+}
+
+if (-not (TemSshd)) {
+  Ruim ""
+  Ruim "Nao consegui ligar o SSH neste PC por nenhum dos tres caminhos."
+  Ruim "Manda o arquivo GENERAL-BURGUER-log.txt (esta na Area de"
+  Ruim "Trabalho) pro Vinicius - nele esta escrito o motivo exato."
+  Ruim ""
+  if ($ip) { Atencao "Mas o Tailscale entrou ($ip), entao ja da pra continuar por outro caminho." }
+  try { Stop-Transcript | Out-Null } catch {}
   Read-Host "  Enter pra fechar"
   exit 1
 }
 
 Set-Service -Name sshd -StartupType Automatic
-Start-Service sshd
-# ssh-agent nao e obrigatorio, mas evita aviso chato no log.
+Start-Service sshd -ErrorAction SilentlyContinue
 Set-Service -Name ssh-agent -StartupType Manual -ErrorAction SilentlyContinue
 Bom "sshd ligado e marcado pra subir sozinho com o Windows."
 
@@ -91,19 +227,19 @@ New-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell `
 Bom "Shell do SSH: PowerShell."
 
 # =====================================================================
-# 2. AUTORIZAR SO A CHAVE DO VINICIUS
+# 4. AUTORIZAR SO A CHAVE DO VINICIUS
 # =====================================================================
-Passo "2/5" "Autorizando a chave do PC do Vinicius..."
+Passo "4/5" "Autorizando a chave do PC do Vinicius..."
 
 $pastaSsh = "C:\ProgramData\ssh"
 if (-not (Test-Path $pastaSsh)) { New-Item -ItemType Directory -Path $pastaSsh -Force | Out-Null }
 
-# Conta de administrador no Windows le a chave DESTE arquivo, nao do
-# .ssh do usuario. E o detalhe que faz 9 de 10 tentativas falharem.
+# Conta de administrador no Windows le a chave DESTE arquivo, e nao da
+# pasta do usuario. E o detalhe que derruba 9 de 10 tentativas.
 $arquivoChaves = Join-Path $pastaSsh "administrators_authorized_keys"
 $jaTem = $false
 if (Test-Path $arquivoChaves) {
-  $jaTem = (Get-Content $arquivoChaves -Raw) -like "*$($CHAVE.Split(' ')[1])*"
+  $jaTem = (Get-Content $arquivoChaves -Raw -ErrorAction SilentlyContinue) -like "*$($CHAVE.Split(' ')[1])*"
 }
 if ($jaTem) {
   Bom "A chave ja estava autorizada."
@@ -112,13 +248,14 @@ if ($jaTem) {
   Bom "Chave autorizada."
 }
 
-# ACL por SID pra funcionar em Windows em qualquer idioma:
+# ACL por SID pra funcionar em Windows de qualquer idioma:
 #   S-1-5-32-544 = Administradores     S-1-5-18 = SISTEMA
-# Se qualquer outro usuario puder escrever neste arquivo, o sshd IGNORA ele.
+# Se qualquer outro usuario puder escrever neste arquivo, o sshd IGNORA
+# ele - calado, sem erro nenhum.
 icacls $arquivoChaves /inheritance:r /grant "*S-1-5-32-544:F" /grant "*S-1-5-18:F" | Out-Null
 Bom "Permissoes do arquivo de chaves no jeito que o sshd exige."
 
-# Senha desligada: so entra quem tem a chave. Nem forca bruta serve.
+# Senha desligada: so entra quem tem a chave.
 $cfg = Join-Path $pastaSsh "sshd_config"
 if (Test-Path $cfg) {
   Copy-Item $cfg "$cfg.antes-do-general-burguer" -Force -ErrorAction SilentlyContinue
@@ -147,64 +284,8 @@ if ((Get-Service sshd).Status -eq "Running") {
   if ((Get-Service sshd).Status -eq "Running") {
     Atencao "Voltou com a configuracao antiga. Avise o Vinicius."
   } else {
-    Ruim "sshd fora do ar. Manda print desta tela pro Vinicius."
+    Ruim "sshd fora do ar. Manda o GENERAL-BURGUER-log.txt pro Vinicius."
   }
-}
-
-# =====================================================================
-# 3. TAILSCALE - a rede privada entre os seus aparelhos
-# =====================================================================
-Passo "3/5" "Instalando o Tailscale..."
-
-if (Test-Path $TAILSCALE) {
-  Bom "Tailscale ja esta instalado."
-} else {
-  if (Get-Command winget -ErrorAction SilentlyContinue) {
-    winget install --id Tailscale.Tailscale -e `
-      --accept-package-agreements --accept-source-agreements | Out-Host
-  }
-  if (-not (Test-Path $TAILSCALE)) {
-    Ruim "Nao consegui instalar sozinho."
-    Ruim "Baixe em https://tailscale.com/download/windows , instale,"
-    Ruim "e rode este arquivo de novo."
-    Read-Host "  Enter pra fechar"
-    exit 1
-  }
-  Bom "Tailscale instalado."
-}
-
-# =====================================================================
-# 4. ENTRAR NA REDE (aqui VOCE clica: tem que fazer login)
-# =====================================================================
-Passo "4/5" "Entrando na rede..."
-
-$ip = ""
-try { $ip = (& $TAILSCALE ip -4 2>$null | Select-Object -First 1) } catch {}
-
-if ([string]::IsNullOrWhiteSpace($ip)) {
-  Write-Host ""
-  Write-Host "  >>> VAI ABRIR O NAVEGADOR PRA VOCE FAZER LOGIN." -ForegroundColor Yellow
-  # Conta errada aqui = os dois PCs entram em redes diferentes e NUNCA se
-  # enxergam, sem dar erro nenhum. Esta e a rede onde o PC do suporte esta.
-  Write-Host "  >>> Entre com o Google   viniciuscacador2@gmail.com" -ForegroundColor Yellow
-  Write-Host "  >>> Tem que ser ESSA conta. Se entrar com outra, este PC cai" -ForegroundColor Yellow
-  Write-Host "  >>> numa rede separada e o suporte nao alcanca ele." -ForegroundColor Yellow
-  Write-Host ""
-  # --unattended: o Tailscale sobe mesmo antes de alguem logar no Windows.
-  Start-Process -FilePath $TAILSCALE -ArgumentList "up","--unattended" -NoNewWindow
-  foreach ($tentativa in 1..60) {
-    Start-Sleep -Seconds 3
-    try { $ip = (& $TAILSCALE ip -4 2>$null | Select-Object -First 1) } catch {}
-    if (-not [string]::IsNullOrWhiteSpace($ip)) { break }
-    if ($tentativa % 5 -eq 0) { Write-Host "      esperando o login..." }
-  }
-}
-
-if ([string]::IsNullOrWhiteSpace($ip)) {
-  Atencao "Ainda nao entrou na rede. Clique no icone do Tailscale perto do"
-  Atencao "relogio, faca login, e rode este arquivo de novo."
-} else {
-  Bom "Na rede. Endereco deste PC: $ip"
 }
 
 # =====================================================================
@@ -229,6 +310,10 @@ Bom "So entra pelo Tailscale. Da internet a porta esta fechada."
 # =====================================================================
 # RELATORIO
 # =====================================================================
+if ([string]::IsNullOrWhiteSpace($ip)) {
+  try { $ip = (& $TAILSCALE ip -4 2>$null | Select-Object -First 1) } catch {}
+}
+
 $lan = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
         Where-Object { $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "100.*" } |
         Select-Object -First 1).IPAddress
@@ -273,15 +358,15 @@ Write-Host ""
 Write-Host "  PRONTO." -ForegroundColor Green
 Write-Host "  ------"
 Write-Host ""
-Write-Host "  Manda isto pro Vinicius:" -ForegroundColor Cyan
-Write-Host ""
 Write-Host "      PC .......... $env:COMPUTERNAME"
 Write-Host "      Usuario ..... $env:USERNAME"
 Write-Host "      Tailscale ... $(if ($ip) { $ip } else { 'NAO ENTROU NA REDE' })" -ForegroundColor Yellow
+Write-Host "      sshd ........ $((Get-Service sshd -ErrorAction SilentlyContinue).Status)" -ForegroundColor Yellow
 Write-Host ""
-Write-Host "  (tambem salvei isso num arquivo na sua Area de Trabalho:"
-Write-Host "   GENERAL-BURGUER-acesso.txt)"
+Write-Host "  Salvei isso na sua Area de Trabalho, em"
+Write-Host "  GENERAL-BURGUER-acesso.txt (e o log completo no -log.txt)."
 Write-Host ""
 Write-Host "  Deixe este computador LIGADO. O resto o suporte faz de longe."
 Write-Host ""
+try { Stop-Transcript | Out-Null } catch {}
 Read-Host "  Enter pra fechar"
