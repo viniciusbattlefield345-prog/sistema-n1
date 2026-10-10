@@ -380,7 +380,11 @@ export function PainelPdv({
           <span>fechar</span>
         </button>
         {/* tipo + mesa/cliente */}
-        <div className="max-h-[45vh] overflow-y-auto border-b border-borda p-4">
+        {/* 45vh numa TV de 720p dá 324px pra tipo + cliente + endereço, e a
+            busca de cliente não cabe. Em tela baixa esse bloco ganha mais
+            espaço: quem perde altura é a lista de itens, que rola de todo
+            jeito. Em tela normal nada muda. */}
+        <div className="max-h-[45vh] overflow-y-auto border-b border-borda p-4 [@media(max-height:820px)]:max-h-[62vh]">
           <div className="mb-3 grid grid-cols-3 gap-2">
             {TIPOS.map((t) => (
               <button
@@ -467,7 +471,7 @@ export function PainelPdv({
                 </div>
               </div>
             ) : (
-              <div className="relative">
+              <div>
                 <input
                   className="campo"
                   value={buscaCliente}
@@ -476,7 +480,12 @@ export function PainelPdv({
                   aria-label="Buscar cliente"
                 />
                 {clientesFiltrados.length > 0 && (
-                  <ul className="absolute inset-x-0 top-full z-20 mt-1 overflow-hidden rounded-lg border border-borda-forte bg-madeira shadow-xl">
+                  // Em fluxo, e não flutuando por cima. O bloco em volta tem
+                  // overflow-y-auto, e filho absoluto ali dentro é recortado:
+                  // na TV de 720p do balcão a lista simplesmente não aparecia.
+                  // Empurrar o conteúdo pra baixo é feio em tela grande e é a
+                  // única coisa que funciona na pequena.
+                  <ul className="mt-1 max-h-56 divide-y divide-borda overflow-y-auto rounded-lg border border-borda-forte bg-madeira">
                     {clientesFiltrados.map((c) => (
                       <li key={c.id}>
                         <button
@@ -485,10 +494,12 @@ export function PainelPdv({
                             setCliente(c);
                             setBuscaCliente("");
                           }}
-                          className="block w-full px-3 py-2 text-left text-sm hover:bg-ouro/15"
+                          className="block w-full px-3 py-2.5 text-left hover:bg-ouro/15"
                         >
-                          <span className="font-medium text-creme">{c.nome}</span>
-                          <span className="ml-2 text-xs text-creme-suave">
+                          <span className="block truncate text-sm font-medium text-creme">
+                            {c.nome}
+                          </span>
+                          <span className="block text-xs text-creme-suave">
                             {formatarTelefone(c.telefone)}
                           </span>
                         </button>
