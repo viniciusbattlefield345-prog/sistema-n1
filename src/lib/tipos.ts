@@ -94,6 +94,8 @@ export interface Cliente {
   observacao: string | null;
 }
 
+export type StatusCaixa = "ABERTO" | "FECHADO";
+
 export interface Caixa {
   id: number;
   usuario_id: string | null;
@@ -102,7 +104,7 @@ export interface Caixa {
   valor_abertura: number;
   valor_fechamento: number | null;
   observacao: string | null;
-  status: "ABERTO" | "FECHADO";
+  status: StatusCaixa;
 }
 
 export interface Mesa {
@@ -197,6 +199,10 @@ export interface Pedido {
   atualizado_em: string;
   mesas?: { numero: number } | null;
   itens_pedido?: ItemPedido[];
+  /** A conta da mesa, quando a tela precisa saber se já foi paga. */
+  comandas?: { id: number; status: StatusComanda } | null;
+  /** O caixa do dia do pedido: fechado, não se mexe mais no pedido. */
+  caixas?: { id: number; status: StatusCaixa } | null;
 }
 
 export type StatusImpressao = "PENDENTE" | "IMPRIMINDO" | "IMPRESSO" | "ERRO";
