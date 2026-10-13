@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { Vazio } from "@/components/Cabecalho";
+import { useMensagens } from "@/components/Mensagens";
 import { CartaoAprovacao } from "../CartaoAprovacao";
 import {
   fecharConta,
@@ -54,9 +55,8 @@ export function DetalheMesa({
   useAoVivo(["pedidos", "comandas", "fila_impressao"]);
 
   const [fechando, setFechando] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
-  const [aviso, setAviso] = useState<string | null>(null);
   const [ocupado, iniciar] = useTransition();
+  const { pedir, sucesso, falha, painel } = useMensagens();
 
   // A lista vem da conta; aqui cada pedido ganha o número da mesa pro rótulo.
   const pedidos = useMemo(
@@ -94,13 +94,11 @@ export function DetalheMesa({
   const servidos = outros.filter((p) => p.status === "CONCLUIDO").length;
   const impressaoConta = impressoes.find((t) => t.tipo === "CONTA");
 
-  function acao(fn: () => Promise<{ ok: boolean; erro?: string }>, sucesso?: string) {
-    setErro(null);
-    setAviso(null);
+  function acao(fn: () => Promise<{ ok: boolean; erro?: string }>, recado?: string) {
     iniciar(async () => {
       const r = await fn();
-      if (!r.ok) setErro(r.erro ?? "Não deu certo.");
-      else if (sucesso) setAviso(sucesso);
+      if (!r.ok) falha(r.erro ?? "Não deu certo.");
+      else if (recado) sucesso(recado);
     });
   }
 
@@ -139,23 +137,6 @@ export function DetalheMesa({
         prontos={prontos}
         servidos={servidos}
       />
-
-      {erro && (
-        <p
-          role="alert"
-          className="mb-4 rounded-xl border border-cancelado/40 bg-cancelado/10 px-4 py-3 text-sm text-cancelado"
-        >
-          {erro}
-        </p>
-      )}
-      {aviso && (
-        <p
-          role="status"
-          className="mb-4 rounded-xl border border-pronto/40 bg-pronto/10 px-4 py-3 text-sm text-pronto"
-        >
-          {aviso}
-        </p>
-      )}
 
       {aMandar.length > 0 && (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-ouro bg-ouro/10 px-4 py-3.5">
@@ -207,15 +188,22 @@ export function DetalheMesa({
                   0,
                 );
                 const desconto = Number(ultimaFechada.desconto);
-                const aviso =
-                  `Reabrir a conta da mesa ${mesa.numero}?\n\nOs ${reais(pago)} saem do caixa do dia e a conta volta pra aberta, com os mesmos pedidos. Corrija o que está errado e feche de novo no fim.` +
-                  (desconto > 0
-                    ? `\n\nO desconto de ${reais(desconto)} volta pra zero — digite de novo ao fechar.`
-                    : "");
-                if (!confirm(aviso)) return;
-                acao(
-                  () => reabrirConta(ultimaFechada.id),
-                  "Conta reaberta. Corrija e feche de novo no fim.",
+                pedir(
+                  {
+                    titulo: `Reabrir a conta da mesa ${mesa.numero}?`,
+                    texto:
+                      `Os ${reais(pago)} saem do caixa do dia e a conta volta pra aberta, com os mesmos pedidos. Corrija o que está errado e feche de novo no fim.` +
+                      (desconto > 0
+                        ? ` O desconto de ${reais(desconto)} volta pra zero — digite de novo ao fechar.`
+                        : ""),
+                    confirmar: "Reabrir a conta",
+                    perigo: true,
+                  },
+                  () =>
+                    acao(
+                      () => reabrirConta(ultimaFechada.id),
+                      "Conta reaberta. Corrija e feche de novo no fim.",
+                    ),
                 );
               }}
             />
@@ -245,29 +233,44 @@ export function DetalheMesa({
                   acao(() => mandarPraCozinha([p.id]), "Mandado pra cozinha.")
                 }
                 aoTentarDeNovo={(id) => acao(() => tentarImpressaoDeNovo(id))}
-                aoCancelar={() => {
-                  if (!confirm(`Cancelar o pedido ${numeroPedido(p.numero_dia)}? Ele sai da conta da mesa.`)) return;
-                  acao(() => cancelarPedido(p.id));
-                }}
-                aoDescancelar={() => {
-                  if (
-                    !confirm(
-                      `Reabrir o pedido ${numeroPedido(p.numero_dia)}? Ele volta a valer ${reais(Number(p.total))} na conta da mesa e entra na fila da cozinha.`,
-                    )
+                aoCancelar={() =>
+                  pedir(
+                    {
+                      titulo: `Cancelar o pedido ${numeroPedido(p.numero_dia)}?`,
+                      texto: `Ele sai da conta da mesa e o total cai ${reais(Number(p.total))}. Continua no histórico, e dá pra reabrir depois.`,
+                      confirmar: "Cancelar o pedido",
+                      perigo: true,
+                    },
+                    () => acao(() => cancelarPedido(p.id), "Pedido cancelado."),
                   )
-                    return;
-                  acao(() => descancelarPedido(p.id), "Pedido reaberto.");
-                }}
-                aoRemoverItem={(item) => {
-                  // Se a cozinha já está com o papel na mão, o sistema não
-                  // alcança ela: quem avisa é quem está tirando o item.
-                  const naChapa = p.status === "PENDENTE" || p.status === "EM PREPARO";
-                  const texto =
-                    `Tirar ${Number(item.quantidade)}x ${item.produto_nome} da conta?` +
-                    (naChapa ? " A cozinha já recebeu esse pedido — avise lá também." : "");
-                  if (!confirm(texto)) return;
-                  acao(() => removerItem(item.id), "Item tirado da conta.");
-                }}
+                }
+                aoDescancelar={() =>
+                  pedir(
+                    {
+                      titulo: `Reabrir o pedido ${numeroPedido(p.numero_dia)}?`,
+                      texto: `Ele volta a valer ${reais(Number(p.total))} na conta da mesa e entra na fila da cozinha.`,
+                      confirmar: "Reabrir o pedido",
+                    },
+                    () => acao(() => descancelarPedido(p.id), "Pedido reaberto."),
+                  )
+                }
+                aoRemoverItem={(item) =>
+                  pedir(
+                    {
+                      titulo: `Tirar ${Number(item.quantidade)}x ${item.produto_nome}?`,
+                      // Se a cozinha já está com o papel na mão, o sistema não
+                      // alcança ela: quem avisa é quem está tirando o item.
+                      texto:
+                        "Sai da conta da mesa e o total se refaz na hora." +
+                        (p.status === "PENDENTE" || p.status === "EM PREPARO"
+                          ? " A cozinha já recebeu esse pedido — avise lá também."
+                          : ""),
+                      confirmar: "Tirar da conta",
+                      perigo: true,
+                    },
+                    () => acao(() => removerItem(item.id), "Item tirado da conta."),
+                  )
+                }
               />
             ))}
           </div>
@@ -330,6 +333,8 @@ export function DetalheMesa({
           </aside>
         </div>
       )}
+
+      {painel}
     </div>
   );
 }

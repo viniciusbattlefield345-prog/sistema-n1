@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { Cabecalho, Vazio } from "@/components/Cabecalho";
+import { useMensagens } from "@/components/Mensagens";
 import { alternarMesa, criarMesa, excluirMesa, trocarCodigo } from "./acoes";
 import type { Mesa } from "@/lib/tipos";
 
@@ -12,12 +13,21 @@ export function CadastroMesas({ mesas, endereco }: { mesas: Mesa[]; endereco: st
   const [erro, setErro] = useState<string | null>(null);
   const [copiado, setCopiado] = useState<number | null>(null);
   const [ocupado, iniciar] = useTransition();
+  const { pedir, sucesso, falha, painel } = useMensagens();
 
-  function acao(fn: () => Promise<{ ok: boolean; erro?: string }>, depois?: () => void) {
+  /** `depois` pode ser o recado de sucesso ou o que fazer em seguida. */
+  function acao(
+    fn: () => Promise<{ ok: boolean; erro?: string }>,
+    depois?: string | (() => void),
+  ) {
     setErro(null);
     iniciar(async () => {
       const r = await fn();
-      if (!r.ok) setErro(r.erro ?? "Não deu certo.");
+      if (!r.ok) {
+        falha(r.erro ?? "Não deu certo.");
+        return;
+      }
+      if (typeof depois === "string") sucesso(depois);
       else depois?.();
     });
   }
@@ -28,7 +38,7 @@ export function CadastroMesas({ mesas, endereco }: { mesas: Mesa[]; endereco: st
       setCopiado(m.id);
       setTimeout(() => setCopiado(null), 2000);
     } catch {
-      setErro("Não consegui copiar. Segure o link e copie à mão.");
+      falha("Não consegui copiar. Segure o link e copie à mão.");
     }
   }
 
@@ -132,25 +142,40 @@ export function CadastroMesas({ mesas, endereco }: { mesas: Mesa[]; endereco: st
                     <button
                       type="button"
                       className="text-xs text-creme-suave underline hover:text-ouro"
-                      onClick={() => {
-                        if (
-                          !confirm(
-                            `Trocar o código da mesa ${m.numero}? O QR impresso dela para de funcionar e você vai precisar imprimir de novo.`,
-                          )
+                      onClick={() =>
+                        pedir(
+                          {
+                            titulo: `Trocar o código da mesa ${m.numero}?`,
+                            texto:
+                              "O QR impresso dela para de funcionar na hora e você vai precisar imprimir e colar o novo.",
+                            confirmar: "Trocar o código",
+                            perigo: true,
+                          },
+                          () =>
+                            acao(
+                              () => trocarCodigo(m.id),
+                              `Código novo. Imprima o QR da mesa ${m.numero} de novo.`,
+                            ),
                         )
-                          return;
-                        acao(() => trocarCodigo(m.id));
-                      }}
+                      }
                     >
                       Trocar código
                     </button>
                     <button
                       type="button"
                       className="ml-4 text-xs text-creme-fraco underline hover:text-cancelado"
-                      onClick={() => {
-                        if (!confirm(`Excluir a mesa ${m.numero}?`)) return;
-                        acao(() => excluirMesa(m.id));
-                      }}
+                      onClick={() =>
+                        pedir(
+                          {
+                            titulo: `Excluir a mesa ${m.numero}?`,
+                            texto:
+                              "Se é só porque ela saiu do salão hoje, desative em vez de excluir — o histórico dos pedidos dela continua.",
+                            confirmar: "Excluir a mesa",
+                            perigo: true,
+                          },
+                          () => acao(() => excluirMesa(m.id), `Mesa ${m.numero} excluída.`),
+                        )
+                      }
                     >
                       Excluir
                     </button>
@@ -161,6 +186,8 @@ export function CadastroMesas({ mesas, endereco }: { mesas: Mesa[]; endereco: st
           </table>
         </div>
       )}
+
+      {painel}
     </div>
   );
 }

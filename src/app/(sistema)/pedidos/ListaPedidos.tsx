@@ -4,6 +4,7 @@ import { Fragment, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { Cabecalho, Vazio } from "@/components/Cabecalho";
 import { FiltroPeriodo } from "@/components/FiltroPeriodo";
+import { useMensagens } from "@/components/Mensagens";
 import { cancelarPedido, descancelarPedido, removerItem } from "./acoes";
 import { reabrirConta } from "../mesas/acoes";
 import { dataHora, extraComVezes, nomePagamento, numeroPedido, reais, rotuloPedido, telefone } from "@/lib/formato";
@@ -62,9 +63,8 @@ export function ListaPedidos({
   const [filtro, setFiltro] = useState<(typeof FILTROS)[number]>("Todos");
   const [busca, setBusca] = useState("");
   const [aberto, setAberto] = useState<number | null>(null);
-  const [erro, setErro] = useState<string | null>(null);
-  const [aviso, setAviso] = useState<string | null>(null);
   const [ocupado, iniciar] = useTransition();
+  const { pedir, sucesso, falha, painel } = useMensagens();
 
   const lista = useMemo(() => {
     const t = busca.trim().toLowerCase();
@@ -88,51 +88,64 @@ export function ListaPedidos({
     .filter((p) => p.status !== "CANCELADO" && p.status !== "AGUARDANDO")
     .reduce((s, p) => s + Number(p.total), 0);
 
-  function acao(fn: () => Promise<{ ok: boolean; erro?: string }>, sucesso?: string) {
-    setErro(null);
-    setAviso(null);
+  function acao(fn: () => Promise<{ ok: boolean; erro?: string }>, recado?: string) {
     iniciar(async () => {
       const r = await fn();
-      if (!r.ok) setErro(r.erro ?? "Não deu certo.");
-      else if (sucesso) setAviso(sucesso);
+      if (!r.ok) falha(r.erro ?? "Não deu certo.");
+      else if (recado) sucesso(recado);
     });
   }
 
   function cancelar(p: Pedido) {
-    if (!confirm(`Cancelar o pedido ${numeroPedido(p.numero_dia)} (${rotuloPedido(p)})?`))
-      return;
-    acao(() => cancelarPedido(p.id), "Pedido cancelado.");
+    pedir(
+      {
+        titulo: `Cancelar o pedido ${numeroPedido(p.numero_dia)}?`,
+        texto: `${rotuloPedido(p)} · ${reais(Number(p.total))}. Ele sai da conta e do relatório, mas continua no histórico — e dá pra reabrir depois.`,
+        confirmar: "Cancelar o pedido",
+        perigo: true,
+      },
+      () => acao(() => cancelarPedido(p.id), "Pedido cancelado."),
+    );
   }
 
   function descancelar(p: Pedido) {
-    if (
-      !confirm(
-        `Reabrir o pedido ${numeroPedido(p.numero_dia)} (${rotuloPedido(p)})?\n\nEle volta a valer ${reais(Number(p.total))} e entra na fila da cozinha. Se a comida já tinha sido feita, acerte a situação na tela da cozinha.`,
-      )
-    )
-      return;
-    acao(() => descancelarPedido(p.id), "Pedido reaberto, está na fila da cozinha.");
+    pedir(
+      {
+        titulo: `Reabrir o pedido ${numeroPedido(p.numero_dia)}?`,
+        texto: `Ele volta a valer ${reais(Number(p.total))} e entra na fila da cozinha. Se a comida já tinha sido feita, acerte a situação na tela da cozinha.`,
+        confirmar: "Reabrir o pedido",
+      },
+      () => acao(() => descancelarPedido(p.id), "Pedido reaberto, está na fila da cozinha."),
+    );
   }
 
   function reabrir(p: Pedido) {
     const id = p.comandas?.id;
     if (!id) return;
-    if (
-      !confirm(
-        `Reabrir a conta da ${rotuloPedido(p)}?\n\nO pagamento sai do caixa do dia e a conta volta pra aberta, com os mesmos pedidos. Corrija o que está errado e feche de novo no fim.`,
-      )
-    )
-      return;
-    acao(() => reabrirConta(id), "Conta reaberta. Corrija e feche de novo no fim.");
+    pedir(
+      {
+        titulo: `Reabrir a conta da ${rotuloPedido(p)}?`,
+        texto: "O pagamento sai do caixa do dia e a conta volta pra aberta, com os mesmos pedidos. Corrija o que está errado e feche de novo no fim.",
+        confirmar: "Reabrir a conta",
+        perigo: true,
+      },
+      () => acao(() => reabrirConta(id), "Conta reaberta. Corrija e feche de novo no fim."),
+    );
   }
 
   function tirarItem(p: Pedido, item: ItemPedido) {
     const naChapa = p.status === "PENDENTE" || p.status === "EM PREPARO";
-    const texto =
-      `Tirar ${Number(item.quantidade)}x ${item.produto_nome} do pedido ${numeroPedido(p.numero_dia)}?` +
-      (naChapa ? " A cozinha já recebeu esse pedido — avise lá também." : "");
-    if (!confirm(texto)) return;
-    acao(() => removerItem(item.id), "Item tirado do pedido.");
+    pedir(
+      {
+        titulo: `Tirar ${Number(item.quantidade)}x ${item.produto_nome}?`,
+        texto:
+          `Sai do pedido ${numeroPedido(p.numero_dia)} e o total se refaz na hora.` +
+          (naChapa ? " A cozinha já recebeu esse pedido — avise lá também." : ""),
+        confirmar: "Tirar do pedido",
+        perigo: true,
+      },
+      () => acao(() => removerItem(item.id), "Item tirado do pedido."),
+    );
   }
 
   return (
@@ -175,17 +188,6 @@ export function ListaPedidos({
           <strong className="tabular text-ouro">{reais(faturado)}</strong>
         </p>
       </div>
-
-      {erro && (
-        <p role="alert" className="mb-4 rounded-lg border border-cancelado/40 bg-cancelado/10 px-3 py-2 text-sm text-cancelado">
-          {erro}
-        </p>
-      )}
-      {aviso && (
-        <p role="status" className="mb-4 rounded-lg border border-pronto/40 bg-pronto/10 px-3 py-2 text-sm text-pronto">
-          {aviso}
-        </p>
-      )}
 
       {lista.length === 0 ? (
         <Vazio
@@ -429,6 +431,8 @@ export function ListaPedidos({
           </table>
         </div>
       )}
+
+      {painel}
     </div>
   );
 }

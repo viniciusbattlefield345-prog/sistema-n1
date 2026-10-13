@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { Cabecalho, Vazio } from "@/components/Cabecalho";
+import { useMensagens } from "@/components/Mensagens";
 import { FormularioCliente } from "./FormularioCliente";
 import { excluirCliente } from "./acoes";
 import { telefone as formatarTelefone } from "@/lib/formato";
@@ -18,6 +19,7 @@ export function ListaClientes({
   const [editando, setEditando] = useState<Cliente | null | undefined>(undefined);
   const [erro, setErro] = useState<string | null>(null);
   const [, iniciar] = useTransition();
+  const { pedir, sucesso, falha, painel } = useMensagens();
 
   const bairroPorId = useMemo(
     () => new Map(bairros.map((b) => [b.id, b])),
@@ -37,12 +39,22 @@ export function ListaClientes({
   }, [clientes, busca]);
 
   function remover(c: Cliente) {
-    if (!confirm(`Excluir ${c.nome}?`)) return;
-    setErro(null);
-    iniciar(async () => {
-      const r = await excluirCliente(c.id);
-      if (!r.ok) setErro(r.erro);
-    });
+    pedir(
+      {
+        titulo: `Excluir ${c.nome}?`,
+        texto: "Cliente com pedido no histórico não é apagado — o pedido perderia o dono.",
+        confirmar: "Excluir cliente",
+        perigo: true,
+      },
+      () => {
+        setErro(null);
+        iniciar(async () => {
+          const r = await excluirCliente(c.id);
+          if (!r.ok) falha(r.erro);
+          else sucesso(`${c.nome} foi excluído.`);
+        });
+      },
+    );
   }
 
   return (
@@ -150,6 +162,8 @@ export function ListaClientes({
           aoFechar={() => setEditando(undefined)}
         />
       )}
+
+      {painel}
     </div>
   );
 }

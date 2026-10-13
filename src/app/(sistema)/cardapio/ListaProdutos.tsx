@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Cabecalho, Vazio } from "@/components/Cabecalho";
+import { useMensagens } from "@/components/Mensagens";
 import { FormularioProduto } from "./FormularioProduto";
 import { alternarDisponivel, excluirProduto } from "./acoes";
 import { reais } from "@/lib/formato";
@@ -20,6 +21,7 @@ export function ListaProdutos({
   const [categoriaId, setCategoriaId] = useState<number | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [, iniciar] = useTransition();
+  const { pedir, sucesso, falha, painel } = useMensagens();
 
   const nomeCategoria = new Map(categorias.map((c) => [c.id, c.nome]));
   const visiveis =
@@ -35,12 +37,22 @@ export function ListaProdutos({
   }
 
   function remover(p: Produto) {
-    if (!confirm(`Excluir "${p.nome}" do cardápio?`)) return;
-    setErro(null);
-    iniciar(async () => {
-      const r = await excluirProduto(p.id);
-      if (!r.ok) setErro(r.erro);
-    });
+    pedir(
+      {
+        titulo: `Excluir "${p.nome}" do cardápio?`,
+        texto: "Se é só porque acabou hoje, marque como indisponível — o produto volta amanhã sem recadastrar.",
+        confirmar: "Excluir do cardápio",
+        perigo: true,
+      },
+      () => {
+        setErro(null);
+        iniciar(async () => {
+          const r = await excluirProduto(p.id);
+          if (!r.ok) falha(r.erro);
+          else sucesso(`"${p.nome}" saiu do cardápio.`);
+        });
+      },
+    );
   }
 
   return (
@@ -209,6 +221,8 @@ export function ListaProdutos({
           aoFechar={() => setEditando(undefined)}
         />
       )}
+
+      {painel}
     </div>
   );
 }

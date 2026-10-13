@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Cabecalho, Vazio } from "./Cabecalho";
+import { useMensagens } from "./Mensagens";
 import { salvarCadastro, excluirCadastro, type Tabela } from "@/app/(sistema)/cadastros";
 import { paraNumero, numero } from "@/lib/formato";
 
@@ -54,6 +55,7 @@ export function Cadastro({
   const [editandoId, setEditandoId] = useState<number | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, iniciar] = useTransition();
+  const { pedir, sucesso, falha, painel } = useMensagens();
 
   const vazio = () =>
     Object.fromEntries(campos.map((c) => [c.chave, c.padrao ?? ""])) as Record<string, string>;
@@ -94,12 +96,22 @@ export function Cadastro({
   }
 
   function excluir(linha: Linha) {
-    if (!confirm(`Excluir "${linha.nome}"?`)) return;
-    setErro(null);
-    iniciar(async () => {
-      const r = await excluirCadastro(tabela, linha.id);
-      if (!r.ok) setErro(r.erro);
-    });
+    pedir(
+      {
+        titulo: `Excluir "${linha.nome}"?`,
+        texto: "Se preferir só tirar do cardápio por hoje, desative em vez de excluir.",
+        confirmar: "Excluir",
+        perigo: true,
+      },
+      () => {
+        setErro(null);
+        iniciar(async () => {
+          const r = await excluirCadastro(tabela, linha.id);
+          if (!r.ok) falha(r.erro);
+          else sucesso(`"${linha.nome}" foi excluído.`);
+        });
+      },
+    );
   }
 
   const mostrar = (linha: Linha, c: Campo) => {
@@ -250,6 +262,8 @@ export function Cadastro({
           </div>
         )
       )}
+
+      {painel}
     </div>
   );
 }
