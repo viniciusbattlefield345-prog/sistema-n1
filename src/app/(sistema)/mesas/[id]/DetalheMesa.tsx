@@ -8,6 +8,7 @@ import {
   fecharConta,
   imprimirConta,
   liberarMesa,
+  mandarPraCozinha,
   reimprimirPedido,
   tentarImpressaoDeNovo,
 } from "../acoes";
@@ -59,6 +60,22 @@ export function DetalheMesa({
         .map((p) => ({ ...p, mesas: { numero: mesa.numero } }))
         .sort((a, b) => b.criado_em.localeCompare(a.criado_em)),
     [comanda, mesa.numero],
+  );
+
+  /**
+   * Quem ainda não foi pra chapa. Pedido só de bebida não entra: não há o que
+   * a cozinha faça com ele, e mandar seria papel em branco.
+   */
+  const aMandar = useMemo(
+    () =>
+      pedidos.filter(
+        (p) =>
+          p.status !== "AGUARDANDO" &&
+          p.status !== "CANCELADO" &&
+          (p.itens_pedido ?? []).some((i) => i.vai_pra_cozinha !== false) &&
+          !impressoes.some((t) => t.pedido_id === p.id),
+      ),
+    [pedidos, impressoes],
   );
 
   const esperando = pedidos.filter((p) => p.status === "AGUARDANDO");
@@ -135,6 +152,34 @@ export function DetalheMesa({
         </p>
       )}
 
+      {aMandar.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-ouro bg-ouro/10 px-4 py-3.5">
+          <div className="min-w-0">
+            <p className="font-display text-base font-extrabold uppercase leading-tight text-ouro">
+              {aMandar.length === 1
+                ? "1 pedido ainda não foi pra cozinha"
+                : `${aMandar.length} pedidos ainda não foram pra cozinha`}
+            </p>
+            <p className="mt-0.5 text-xs text-creme-suave">
+              Nada sai na chapa até você mandar. Lance tudo que o cliente pedir e mande de uma vez.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="btn btn-ouro shrink-0"
+            disabled={ocupado}
+            onClick={() =>
+              acao(
+                () => mandarPraCozinha(aMandar.map((p) => p.id)),
+                "Mandado pra cozinha.",
+              )
+            }
+          >
+            Mandar pra cozinha
+          </button>
+        </div>
+      )}
+
       {!comanda ? (
         <Vazio
           titulo="Mesa livre"
@@ -164,6 +209,9 @@ export function DetalheMesa({
                 impressao={impressoes.find((t) => t.pedido_id === p.id) ?? null}
                 ocupado={ocupado}
                 aoReimprimir={() => acao(() => reimprimirPedido(p.id), "Mandado pra impressora.")}
+                aoMandarPraCozinha={() =>
+                  acao(() => mandarPraCozinha([p.id]), "Mandado pra cozinha.")
+                }
                 aoTentarDeNovo={(id) => acao(() => tentarImpressaoDeNovo(id))}
                 aoCancelar={() => {
                   if (!confirm(`Cancelar o pedido ${numeroPedido(p.numero_dia)}? Ele sai da conta da mesa.`)) return;
@@ -369,6 +417,7 @@ function CartaoPedido({
   impressao,
   ocupado,
   aoReimprimir,
+  aoMandarPraCozinha,
   aoTentarDeNovo,
   aoCancelar,
   aoRemoverItem,
@@ -377,12 +426,14 @@ function CartaoPedido({
   impressao: TrabalhoImpressao | null;
   ocupado: boolean;
   aoReimprimir: () => void;
+  aoMandarPraCozinha: () => void;
   aoTentarDeNovo: (id: number) => void;
   aoCancelar: () => void;
   aoRemoverItem: (item: ItemPedido) => void;
 }) {
   const cancelado = pedido.status === "CANCELADO";
   const itens = pedido.itens_pedido ?? [];
+  const temCozinha = itens.some((i) => i.vai_pra_cozinha !== false);
   const nome =
     pedido.cliente_nome && !pedido.cliente_nome.startsWith("Mesa ") ? pedido.cliente_nome : null;
 
@@ -461,18 +512,36 @@ function CartaoPedido({
         <footer className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-borda pt-3">
           {impressao ? (
             <SituacaoImpressao trabalho={impressao} aoTentarDeNovo={aoTentarDeNovo} />
+          ) : temCozinha ? (
+            <span className="text-xs font-semibold text-ouro">Não foi pra cozinha ainda</span>
           ) : (
-            <span className="text-xs text-creme-fraco">Sem impressão</span>
+            <span className="text-xs text-creme-fraco">Só bebida — não vai pra cozinha</span>
           )}
-          <span className="flex gap-3">
-            <button
-              type="button"
-              onClick={aoReimprimir}
-              disabled={ocupado}
-              className="text-xs text-creme-suave underline hover:text-ouro"
-            >
-              Reimprimir
-            </button>
+          <span className="flex items-center gap-3">
+            {/*
+              Enquanto não foi, o botão é o da chapa e aparece inteiro: é a
+              ação que falta. Depois vira "Reimprimir", discreto, porque
+              mandar duas vezes a mesma comanda é o erro a evitar.
+            */}
+            {!impressao && temCozinha ? (
+              <button
+                type="button"
+                onClick={aoMandarPraCozinha}
+                disabled={ocupado}
+                className="btn btn-ouro px-3 py-1.5 text-xs"
+              >
+                Mandar pra cozinha
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={aoReimprimir}
+                disabled={ocupado}
+                className="text-xs text-creme-suave underline hover:text-ouro"
+              >
+                Reimprimir
+              </button>
+            )}
             <button
               type="button"
               onClick={aoCancelar}

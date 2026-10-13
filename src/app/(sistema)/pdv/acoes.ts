@@ -124,7 +124,19 @@ export async function salvarPedido(dados: PedidoEnviado): Promise<Resultado> {
     return resultado;
   }
 
-  await mandarImprimir(supabase, { tipo: "PEDIDO", pedido_id: resultado.id }, user.id);
+  /**
+   * Retirada e entrega saem na hora: o cliente está esperando no balcão e o
+   * motoboy precisa do endereço pra sair.
+   *
+   * Mesa não. Na mesa o pedido cresce aos poucos — o cliente pede o lanche,
+   * depois lembra do refrigerante, depois o amigo chega e pede o dele. Se
+   * cada lançamento puxasse papel, a chapa receberia cinco comandas da mesma
+   * mesa e viraria bagunça. Quem decide a hora de mandar é o atendente, pelo
+   * botão "Mandar pra cozinha" na tela da mesa.
+   */
+  if (!ehMesa) {
+    await mandarImprimir(supabase, { tipo: "PEDIDO", pedido_id: resultado.id }, user.id);
+  }
 
   for (const tela of ["/cozinha", "/pedidos", "/mesas", "/entregas", "/impressao"])
     revalidatePath(tela);

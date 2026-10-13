@@ -47,7 +47,11 @@ async function liberarSeVazia(supabase: Supabase, comandaId: number, usuarioId: 
   }
 }
 
-/** Aprovar = mandar pra cozinha e pra impressora do balcão. */
+/**
+ * Aprovar = aceitar o pedido que o cliente fez pelo QR e somar na conta da
+ * mesa. Não imprime: o papel sai quando o atendente mandar pra cozinha, pra
+ * mesa não acumular uma comanda por item pedido.
+ */
 export async function aprovarPedido(id: number): Promise<Resultado> {
   const { supabase, user } = await sessao();
   if (!user) return { ok: false, erro: "Sessão expirada. Entre de novo." };
@@ -66,11 +70,28 @@ export async function aprovarPedido(id: number): Promise<Resultado> {
   if (error) return { ok: false, erro: error.message };
   if (!data) return { ok: false, erro: "Esse pedido já foi aprovado ou recusado por outra pessoa." };
 
-  const impressao = await mandarImprimir(supabase, { tipo: "PEDIDO", pedido_id: id }, user.id);
   atualizarTelas();
+  return { ok: true };
+}
 
-  if (!impressao.ok)
-    return { ok: false, erro: `Aprovado, mas não entrou na fila da impressora: ${impressao.erro}` };
+/**
+ * Manda pra chapa o que ainda não foi. Um toque, um papel por pedido — e
+ * pedido que só tem bebida sai da fila sem gastar papel, porque a cozinha
+ * não tem nada a fazer com ele.
+ */
+export async function mandarPraCozinha(ids: number[]): Promise<Resultado> {
+  const { supabase, user } = await sessao();
+  if (!user) return { ok: false, erro: "Sessão expirada. Entre de novo." };
+
+  const alvos = [...new Set(ids.map(Number).filter(Number.isInteger))];
+  if (alvos.length === 0) return { ok: false, erro: "Nenhum pedido pra mandar." };
+
+  const { error } = await supabase
+    .from("fila_impressao")
+    .insert(alvos.map((pedido_id) => ({ tipo: "PEDIDO", pedido_id, pedido_por: user.id })));
+
+  if (error) return { ok: false, erro: error.message };
+  atualizarTelas();
   return { ok: true };
 }
 
