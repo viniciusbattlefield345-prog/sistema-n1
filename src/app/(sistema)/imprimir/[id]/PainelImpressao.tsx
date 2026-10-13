@@ -51,12 +51,12 @@ export function PainelImpressao({
     });
   }
 
-  async function imprimirAqui() {
+  async function imprimirAqui(soCaixa = false) {
     setMensagem(null);
     try {
       await imprimirCru(
         impressoras.impressora,
-        viaPedido(pedido, restaurante, impressoras),
+        viaPedido(pedido, restaurante, impressoras, { soCaixa }),
         impressoras.vias,
       );
       setMensagem({ tom: "ok", texto: "Impresso por este computador." });
@@ -142,8 +142,24 @@ export function PainelImpressao({
         <button className="btn btn-ouro" onClick={mandarPraFila} disabled={ocupado}>
           Mandar pra impressora do balcão
         </button>
-        <button className="btn btn-quieto" onClick={imprimirAqui} disabled={!impressoras.impressora}>
-          Imprimir neste computador
+        {/*
+          A conta deste pedido, com preco e total, sem a via da cozinha.
+          Pedido de retirada so solta a comanda da chapa na hora: o papel que
+          o cliente leva e este, e sai aqui, na hora de receber.
+        */}
+        <button
+          className="btn btn-quieto"
+          onClick={() => imprimirAqui(true)}
+          disabled={!impressoras.impressora}
+        >
+          Imprimir a conta
+        </button>
+        <button
+          className="btn btn-quieto"
+          onClick={() => imprimirAqui(false)}
+          disabled={!impressoras.impressora}
+        >
+          Imprimir tudo de novo
         </button>
         <button className="btn btn-quieto" onClick={() => window.print()}>
           Ver / salvar em PDF

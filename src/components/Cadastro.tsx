@@ -5,7 +5,7 @@ import { Cabecalho, Vazio } from "./Cabecalho";
 import { salvarCadastro, excluirCadastro, type Tabela } from "@/app/(sistema)/cadastros";
 import { paraNumero, numero } from "@/lib/formato";
 
-export type TipoCampo = "texto" | "dinheiro" | "inteiro" | "lista";
+export type TipoCampo = "texto" | "dinheiro" | "inteiro" | "lista" | "sim_nao";
 
 export interface Campo {
   chave: string;
@@ -14,6 +14,10 @@ export interface Campo {
   largura?: string;
   placeholder?: string;
   opcoes?: string[];
+  /** O que já vem escolhido numa linha nova. Vale pros campos sim/não. */
+  padrao?: string;
+  /** Uma linha de explicação embaixo do campo, pra escolha que não é óbvia. */
+  ajuda?: string;
 }
 
 export interface Linha {
@@ -52,7 +56,7 @@ export function Cadastro({
   const [ocupado, iniciar] = useTransition();
 
   const vazio = () =>
-    Object.fromEntries(campos.map((c) => [c.chave, ""])) as Record<string, string>;
+    Object.fromEntries(campos.map((c) => [c.chave, c.padrao ?? ""])) as Record<string, string>;
 
   function paraBanco(r: Record<string, string>) {
     const saida: Record<string, unknown> = {};
@@ -63,7 +67,9 @@ export function Cadastro({
           ? paraNumero(v)
           : c.tipo === "inteiro"
             ? Math.trunc(paraNumero(v))
-            : v.trim() || null;
+            : c.tipo === "sim_nao"
+              ? v === "true"
+              : v.trim() || null;
     }
     return saida;
   }
@@ -98,6 +104,7 @@ export function Cadastro({
 
   const mostrar = (linha: Linha, c: Campo) => {
     const v = linha[c.chave];
+    if (c.tipo === "sim_nao") return v ? "Sim" : "Não";
     if (v === null || v === undefined || v === "") return "—";
     if (c.tipo === "dinheiro") return "R$ " + numero(Number(v));
     return String(v);
@@ -280,7 +287,17 @@ function EditorLinha({
           <label className="rotulo" htmlFor={`c-${c.chave}`}>
             {c.rotulo}
           </label>
-          {c.tipo === "lista" ? (
+          {c.tipo === "sim_nao" ? (
+            <select
+              id={`c-${c.chave}`}
+              className="campo"
+              value={rascunho[c.chave] === "true" ? "true" : "false"}
+              onChange={(e) => setRascunho({ ...rascunho, [c.chave]: e.target.value })}
+            >
+              <option value="false">Não</option>
+              <option value="true">Sim</option>
+            </select>
+          ) : c.tipo === "lista" ? (
             <input
               id={`c-${c.chave}`}
               list={`op-${c.chave}`}
@@ -312,6 +329,7 @@ function EditorLinha({
               ))}
             </datalist>
           )}
+          {c.ajuda && <p className="mt-1 text-xs text-creme-fraco">{c.ajuda}</p>}
         </div>
       ))}
 

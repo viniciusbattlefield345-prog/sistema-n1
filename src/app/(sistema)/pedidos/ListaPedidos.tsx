@@ -185,7 +185,7 @@ export function ListaPedidos({ pedidos }: { pedidos: Pedido[] }) {
                       >
                         Imprimir
                       </Link>
-                      {!["CONCLUIDO", "CANCELADO"].includes(p.status) && (
+                      {p.status !== "CANCELADO" && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();

@@ -13,7 +13,7 @@ import { usuarioAtual } from "@/lib/supabase/sessao";
  * escrever, o que seria um buraco enorme.
  */
 const PERMITIDO = {
-  categorias: ["nome", "descricao", "ordem", "ativo"],
+  categorias: ["nome", "descricao", "ordem", "ativo", "meio_a_meio", "vai_pra_cozinha"],
   adicionais: ["nome", "preco", "grupo", "ordem", "ativo"],
   bairros: ["nome", "taxa", "ativo"],
 } as const;

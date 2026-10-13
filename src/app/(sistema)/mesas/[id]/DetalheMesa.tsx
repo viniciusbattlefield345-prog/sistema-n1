@@ -11,12 +11,13 @@ import {
   reimprimirPedido,
   tentarImpressaoDeNovo,
 } from "../acoes";
-import { cancelarPedido } from "../../pedidos/acoes";
+import { cancelarPedido, removerItem } from "../../pedidos/acoes";
 import { useAoVivo } from "@/lib/aoVivo";
 import { FORMAS_PAGAMENTO, centavos, duracao, extraComVezes, hora, minutosDesde, nomePagamento, numero, numeroPedido, paraNumero, reais, rotuloPedido } from "@/lib/formato";
 import type {
   Comanda,
   FormaPagamento,
+  ItemPedido,
   Mesa,
   Pedido,
   StatusPedido,
@@ -167,6 +168,16 @@ export function DetalheMesa({
                 aoCancelar={() => {
                   if (!confirm(`Cancelar o pedido ${numeroPedido(p.numero_dia)}? Ele sai da conta da mesa.`)) return;
                   acao(() => cancelarPedido(p.id));
+                }}
+                aoRemoverItem={(item) => {
+                  // Se a cozinha já está com o papel na mão, o sistema não
+                  // alcança ela: quem avisa é quem está tirando o item.
+                  const naChapa = p.status === "PENDENTE" || p.status === "EM PREPARO";
+                  const texto =
+                    `Tirar ${Number(item.quantidade)}x ${item.produto_nome} da conta?` +
+                    (naChapa ? " A cozinha já recebeu esse pedido — avise lá também." : "");
+                  if (!confirm(texto)) return;
+                  acao(() => removerItem(item.id), "Item tirado da conta.");
                 }}
               />
             ))}
@@ -360,6 +371,7 @@ function CartaoPedido({
   aoReimprimir,
   aoTentarDeNovo,
   aoCancelar,
+  aoRemoverItem,
 }: {
   pedido: Pedido;
   impressao: TrabalhoImpressao | null;
@@ -367,8 +379,10 @@ function CartaoPedido({
   aoReimprimir: () => void;
   aoTentarDeNovo: (id: number) => void;
   aoCancelar: () => void;
+  aoRemoverItem: (item: ItemPedido) => void;
 }) {
   const cancelado = pedido.status === "CANCELADO";
+  const itens = pedido.itens_pedido ?? [];
   const nome =
     pedido.cliente_nome && !pedido.cliente_nome.startsWith("Mesa ") ? pedido.cliente_nome : null;
 
@@ -402,19 +416,38 @@ function CartaoPedido({
       </header>
 
       <ul className="mt-3 space-y-1 border-t border-borda pt-3 text-sm">
-        {(pedido.itens_pedido ?? []).map((item) => (
-          <li key={item.id}>
-            <span className="font-bold text-ouro">{Number(item.quantidade)}x </span>
-            {item.produto_nome}
-            {item.variacao_nome && ` (${item.variacao_nome})`}
-            {(item.item_adicionais ?? []).length > 0 && (
-              <span className="text-creme-suave">
-                {" "}
-                + {(item.item_adicionais ?? []).map(extraComVezes).join(", ")}
-              </span>
-            )}
-            {item.observacao && (
-              <span className="ml-1 text-xs font-semibold text-preparo">({item.observacao})</span>
+        {itens.map((item) => (
+          <li key={item.id} className="flex items-start justify-between gap-2">
+            <span className="min-w-0">
+              <span className="font-bold text-ouro">{Number(item.quantidade)}x </span>
+              {item.produto_nome}
+              {item.variacao_nome && ` (${item.variacao_nome})`}
+              {(item.item_adicionais ?? []).length > 0 && (
+                <span className="text-creme-suave">
+                  {" "}
+                  + {(item.item_adicionais ?? []).map(extraComVezes).join(", ")}
+                </span>
+              )}
+              {item.observacao && (
+                <span className="ml-1 text-xs font-semibold text-preparo">({item.observacao})</span>
+              )}
+            </span>
+            {/*
+              Tirar uma linha sem derrubar o pedido inteiro: lançou a coca
+              errada, tira a coca. A última linha não some — aí é o pedido
+              todo que está errado, e quem faz isso é o Cancelar.
+            */}
+            {!cancelado && itens.length > 1 && (
+              <button
+                type="button"
+                onClick={() => aoRemoverItem(item)}
+                disabled={ocupado}
+                title="Tirar este item da conta"
+                aria-label={`Tirar ${item.produto_nome} da conta`}
+                className="shrink-0 rounded px-1.5 text-xs leading-5 text-creme-fraco hover:text-cancelado"
+              >
+                ✕
+              </button>
             )}
           </li>
         ))}
@@ -440,16 +473,14 @@ function CartaoPedido({
             >
               Reimprimir
             </button>
-            {pedido.status !== "CONCLUIDO" && (
-              <button
-                type="button"
-                onClick={aoCancelar}
-                disabled={ocupado}
-                className="text-xs text-creme-fraco underline hover:text-cancelado"
-              >
-                Cancelar
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={aoCancelar}
+              disabled={ocupado}
+              className="text-xs text-creme-fraco underline hover:text-cancelado"
+            >
+              Cancelar
+            </button>
           </span>
         </footer>
       )}

@@ -73,7 +73,13 @@ create table categorias (
   nome       text not null,
   descricao  text,                                -- "de 8 fatias"
   ordem      int not null default 0,
-  ativo      boolean not null default true
+  ativo      boolean not null default true,
+  -- pizza: os sabores desta categoria podem sair meia a meia
+  meio_a_meio      boolean not null default false,
+  -- bebida e picole nao tem nada a fazer na chapa: ficam fora da comanda
+  -- da cozinha. A excecao e marcada aqui, entao categoria nova ja nasce
+  -- indo pra cozinha, que e o caso comum.
+  vai_pra_cozinha  boolean not null default true
 );
 
 create table produtos (
@@ -86,6 +92,7 @@ create table produtos (
   custo         numeric(10,2) check (custo >= 0),
   ativo         boolean not null default true,    -- some do cardapio
   disponivel    boolean not null default true,    -- "acabou hoje"
+  fatias        smallint,                         -- pizza: 8, 10 ou 12
   ordem         int not null default 0,
   criado_em     timestamptz not null default now()
 );
@@ -258,6 +265,14 @@ create table itens_pedido (
   pedido_id       bigint not null references pedidos(id) on delete cascade,
   produto_id      bigint references produtos(id) on delete set null,
   variacao_id     bigint references produto_variacoes(id) on delete set null,
+  -- meia a meia: o sabor da outra metade. O nome ja vai montado em
+  -- produto_nome ("1/2 Calabresa + 1/2 Portuguesa"); isto aqui e pro
+  -- relatorio saber que os dois sabores sairam.
+  segundo_produto_id bigint references produtos(id) on delete set null,
+  -- decidido na hora do pedido, nao lido da categoria na hora de imprimir:
+  -- pedido de ontem nao muda de comportamento se o cardapio for
+  -- reorganizado amanha.
+  vai_pra_cozinha boolean not null default true,
   produto_nome    text not null,      -- foto do nome na hora da venda
   variacao_nome   text,
   quantidade      numeric(10,3) not null default 1 check (quantidade > 0),

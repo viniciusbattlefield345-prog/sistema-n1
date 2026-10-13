@@ -171,11 +171,26 @@ export function viaPedido(
   pedido: Pedido,
   restaurante: ConfigRestaurante,
   cfg: ConfigImpressoras,
+  opcoes?: {
+    /** Só a via do caixa: a conta pra entregar na mão do cliente, no fim. */
+    soCaixa?: boolean;
+  },
 ): string {
   const c = new Cupom(cfg.colunas);
-  // Desligar as duas seria papel em branco: sobra a do caixa, que tem o total.
-  const caixa = cfg.via_caixa || !cfg.via_cozinha;
-  const temCozinha = itensDaCozinha(pedido).length > 0;
+
+  /**
+   * Entrega SEMPRE leva a via do caixa, mesmo com ela desligada.
+   *
+   * É o único papel que vai dentro da sacola, e é nele que estão o endereço,
+   * o total e o troco. Sem ele o motoboy sai sem saber onde parar nem quanto
+   * cobrar — a via da cozinha não tem nada disso, de propósito.
+   *
+   * Mesa e retirada seguem a configuração: ali o cliente está na casa, e a
+   * conta sai quando ele pede, não quando a cozinha recebe.
+   */
+  const caixa =
+    opcoes?.soCaixa || pedido.tipo === "ENTREGA" || cfg.via_caixa || !cfg.via_cozinha;
+  const temCozinha = !opcoes?.soCaixa && itensDaCozinha(pedido).length > 0;
 
   /**
    * Pedido so de bebida, com a via do caixa desligada: nao ha o que imprimir.
