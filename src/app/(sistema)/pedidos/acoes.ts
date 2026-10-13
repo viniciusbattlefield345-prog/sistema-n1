@@ -44,6 +44,11 @@ async function podeMexer(
       .select("status")
       .eq("id", pedido.comanda_id)
       .maybeSingle();
+    if (conta && conta.status === "CANCELADA")
+      return {
+        ok: false,
+        erro: "A conta dessa mesa foi cancelada e a mesa liberada. Lance o pedido de novo na mesa.",
+      };
     if (conta && conta.status !== "ABERTA")
       return {
         ok: false,
@@ -83,6 +88,48 @@ export async function cancelarPedido(id: number): Promise<Resultado> {
     .eq("id", id);
 
   if (error) return { ok: false, erro: error.message };
+
+  atualizarTelas();
+  return { ok: true };
+}
+
+/**
+ * Volta atrás num cancelamento.
+ *
+ * Cancelar é um toque e dá pra errar de linha: o atendente cancela o #12
+ * querendo cancelar o #13 e o cliente fica sem o lanche. Como cancelar não
+ * apaga nada — só marca — desfazer é desmarcar, e o valor volta pra conta da
+ * mesa pelo mesmo gatilho do banco que o tirou.
+ *
+ * Volta como PENDENTE, na fila da cozinha, que é onde um pedido novo nasce. O
+ * sistema não tem como saber se a comida já foi feita; quem sabe é quem está
+ * lá, e dali ele segue pelos botões normais da cozinha.
+ */
+export async function descancelarPedido(id: number): Promise<Resultado> {
+  const supabase = await criarClienteServidor();
+  const user = await usuarioAtual(supabase);
+  if (!user) return { ok: false, erro: "Sessão expirada." };
+
+  const pode = await podeMexer(supabase, id);
+  if (!pode.ok) return pode;
+  if (pode.pedido.status !== "CANCELADO")
+    return { ok: false, erro: "Esse pedido não está cancelado." };
+
+  // Trava no status: duas pessoas tocando junto não devolvem o valor em dobro.
+  const { data, error } = await supabase
+    .from("pedidos")
+    .update({
+      status: "PENDENTE",
+      motivo_recusa: null,
+      atualizado_em: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .eq("status", "CANCELADO")
+    .select("id")
+    .maybeSingle();
+
+  if (error) return { ok: false, erro: error.message };
+  if (!data) return { ok: false, erro: "Esse pedido acabou de mudar. Recarregue a tela." };
 
   atualizarTelas();
   return { ok: true };

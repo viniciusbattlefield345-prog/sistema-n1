@@ -4,7 +4,7 @@ import { Fragment, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { Cabecalho, Vazio } from "@/components/Cabecalho";
 import { FiltroPeriodo } from "@/components/FiltroPeriodo";
-import { cancelarPedido, removerItem } from "./acoes";
+import { cancelarPedido, descancelarPedido, removerItem } from "./acoes";
 import { reabrirConta } from "../mesas/acoes";
 import { dataHora, extraComVezes, nomePagamento, numeroPedido, reais, rotuloPedido, telefone } from "@/lib/formato";
 import type { Periodo } from "@/lib/periodo";
@@ -102,6 +102,16 @@ export function ListaPedidos({
     if (!confirm(`Cancelar o pedido ${numeroPedido(p.numero_dia)} (${rotuloPedido(p)})?`))
       return;
     acao(() => cancelarPedido(p.id), "Pedido cancelado.");
+  }
+
+  function descancelar(p: Pedido) {
+    if (
+      !confirm(
+        `Reabrir o pedido ${numeroPedido(p.numero_dia)} (${rotuloPedido(p)})?\n\nEle volta a valer ${reais(Number(p.total))} e entra na fila da cozinha. Se a comida já tinha sido feita, acerte a situação na tela da cozinha.`,
+      )
+    )
+      return;
+    acao(() => descancelarPedido(p.id), "Pedido reaberto, está na fila da cozinha.");
   }
 
   function reabrir(p: Pedido) {
@@ -289,6 +299,19 @@ export function ListaPedidos({
                             className="ml-4 text-xs text-creme-fraco underline hover:text-cancelado"
                           >
                             Cancelar
+                          </button>
+                        )}
+                        {/* Cancelou errado: volta. Cancelar só marca, não apaga. */}
+                        {p.status === "CANCELADO" && edicao.pode && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              descancelar(p);
+                            }}
+                            disabled={ocupado}
+                            className="ml-4 text-xs text-pronto underline hover:text-pronto"
+                          >
+                            Reabrir pedido
                           </button>
                         )}
                       </td>

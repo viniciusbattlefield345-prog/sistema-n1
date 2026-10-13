@@ -13,7 +13,7 @@ import {
   reimprimirPedido,
   tentarImpressaoDeNovo,
 } from "../acoes";
-import { cancelarPedido, removerItem } from "../../pedidos/acoes";
+import { cancelarPedido, descancelarPedido, removerItem } from "../../pedidos/acoes";
 import { useAoVivo } from "@/lib/aoVivo";
 import { FORMAS_PAGAMENTO, centavos, duracao, extraComVezes, hora, minutosDesde, nomePagamento, numero, numeroPedido, paraNumero, reais, rotuloPedido } from "@/lib/formato";
 import type {
@@ -248,6 +248,15 @@ export function DetalheMesa({
                 aoCancelar={() => {
                   if (!confirm(`Cancelar o pedido ${numeroPedido(p.numero_dia)}? Ele sai da conta da mesa.`)) return;
                   acao(() => cancelarPedido(p.id));
+                }}
+                aoDescancelar={() => {
+                  if (
+                    !confirm(
+                      `Reabrir o pedido ${numeroPedido(p.numero_dia)}? Ele volta a valer ${reais(Number(p.total))} na conta da mesa e entra na fila da cozinha.`,
+                    )
+                  )
+                    return;
+                  acao(() => descancelarPedido(p.id), "Pedido reaberto.");
                 }}
                 aoRemoverItem={(item) => {
                   // Se a cozinha já está com o papel na mão, o sistema não
@@ -522,6 +531,7 @@ function CartaoPedido({
   aoMandarPraCozinha,
   aoTentarDeNovo,
   aoCancelar,
+  aoDescancelar,
   aoRemoverItem,
 }: {
   pedido: Pedido;
@@ -531,6 +541,7 @@ function CartaoPedido({
   aoMandarPraCozinha: () => void;
   aoTentarDeNovo: (id: number) => void;
   aoCancelar: () => void;
+  aoDescancelar: () => void;
   aoRemoverItem: (item: ItemPedido) => void;
 }) {
   const cancelado = pedido.status === "CANCELADO";
@@ -608,6 +619,25 @@ function CartaoPedido({
 
       {cancelado && pedido.motivo_recusa && (
         <p className="mt-2 text-xs text-cancelado">Motivo: {pedido.motivo_recusa}</p>
+      )}
+
+      {/*
+        Cancelado não é o fim da linha: cancelar só marca o pedido, nada é
+        apagado. Quem cancelou a linha errada volta daqui, e o valor retorna
+        pra conta da mesa.
+      */}
+      {cancelado && (
+        <footer className="mt-3 flex items-center justify-between gap-2 border-t border-borda pt-3">
+          <span className="text-xs text-creme-fraco">Fora da conta</span>
+          <button
+            type="button"
+            onClick={aoDescancelar}
+            disabled={ocupado}
+            className="text-xs text-pronto underline hover:text-pronto"
+          >
+            Reabrir pedido
+          </button>
+        </footer>
       )}
 
       {!cancelado && (

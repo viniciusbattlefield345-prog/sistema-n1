@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { usuarioAtual } from "@/lib/supabase/sessao";
@@ -5,6 +6,7 @@ import { Cabecalho, Vazio } from "@/components/Cabecalho";
 import { FiltroPeriodo } from "@/components/FiltroPeriodo";
 import { nomePagamento, reais } from "@/lib/formato";
 import {
+  buscaDoPeriodo,
   diaCurto,
   diaSp,
   fimIso,
@@ -55,7 +57,9 @@ export default async function PaginaRelatorios({ searchParams }: PageProps<"/rel
   ] = await Promise.all([
     supabase
       .from("pedidos")
-      .select("total, desconto, taxa_entrega, forma_pagamento, tipo, origem, criado_em, usuario_id")
+      .select(
+        "total, desconto, taxa_entrega, forma_pagamento, tipo, origem, criado_em, usuario_id, comanda_id",
+      )
       .gte("criado_em", inicio)
       .lt("criado_em", fim)
       .not("status", "in", FORA_DA_CONTA),
@@ -72,9 +76,12 @@ export default async function PaginaRelatorios({ searchParams }: PageProps<"/rel
       .select("valor, forma")
       .gte("criado_em", inicio)
       .lt("criado_em", fim),
+    // As contas pagas no período, com os pedidos delas. Os pedidos vêm junto
+    // porque é só por eles que se descobre quanto do dinheiro recebido hoje
+    // é de pedido lançado em outro dia — a mesa que virou a noite.
     supabase
       .from("comandas")
-      .select("desconto")
+      .select("id, desconto, pedidos(total, status, criado_em)")
       .eq("status", "FECHADA")
       .gte("fechada_em", inicio)
       .lt("fechada_em", fim),
@@ -100,9 +107,9 @@ export default async function PaginaRelatorios({ searchParams }: PageProps<"/rel
   const vendidoAntes = (antes ?? []).reduce((s, v) => s + Number(v.total), 0);
 
   const canceladoValor = (cancelados ?? []).reduce((s, c) => s + Number(c.total), 0);
-  const descontos =
-    lista.reduce((s, v) => s + Number(v.desconto), 0) +
-    (contas ?? []).reduce((s, c) => s + Number(c.desconto), 0);
+  // Desconto no pedido já está dentro do total dele; o da conta de mesa é
+  // dado no fechamento e fica de fora — por isso aparece separado na ponte.
+  const descontoPedidos = lista.reduce((s, v) => s + Number(v.desconto), 0);
   const entregas = lista.reduce((s, v) => s + Number(v.taxa_entrega), 0);
 
   // Entrega e retirada pagam no pedido; mesa paga no fechamento da conta.
@@ -117,7 +124,44 @@ export default async function PaginaRelatorios({ searchParams }: PageProps<"/rel
     porPagamento.set(nome, (porPagamento.get(nome) ?? 0) + Number(pg.valor));
   }
   const recebido = [...porPagamento.values()].reduce((s, v) => s + v, 0);
-  const aReceber = Math.max(vendido - recebido, 0);
+
+  /**
+   * A ponte entre "vendido" e "recebido".
+   *
+   * Os dois números respondem perguntas diferentes e por isso quase nunca são
+   * iguais: a venda conta pelo dia em que o pedido foi lançado, o caixa conta
+   * pelo dia em que o dinheiro entrou. Uma mesa aberta na sexta e paga no
+   * domingo aparece na venda de sexta e no caixa de domingo.
+   *
+   * Sem mostrar essa diferença, a tela parecia errada — "o recebido está
+   * maior que o vendido, de onde saiu esse valor?". Sai daqui, e a conta
+   * fecha no centavo:
+   *
+   *   recebido = vendido + de outros dias − ainda em conta aberta − descontos
+   */
+  const fechadasNoPeriodo = new Set((contas ?? []).map((c) => c.id as number));
+  const inicioMs = Date.parse(inicio);
+
+  let deOutrosDias = 0;
+  for (const c of contas ?? []) {
+    for (const ped of (c.pedidos ?? []) as {
+      total: number;
+      status: string;
+      criado_em: string;
+    }[]) {
+      if (ped.status === "CANCELADO" || ped.status === "AGUARDANDO") continue;
+      if (Date.parse(ped.criado_em) < inicioMs) deOutrosDias += Number(ped.total);
+    }
+  }
+
+  let emContaAberta = 0;
+  for (const v of lista) {
+    if (v.tipo !== "MESA" || !v.comanda_id) continue;
+    if (!fechadasNoPeriodo.has(v.comanda_id)) emContaAberta += Number(v.total);
+  }
+
+  const descontoContas = (contas ?? []).reduce((s, c) => s + Number(c.desconto), 0);
+  const aReceber = emContaAberta;
 
   const porTipo = new Map<string, { qtd: number; valor: number }>();
   const porDia = new Map<string, number>();
@@ -179,41 +223,74 @@ export default async function PaginaRelatorios({ searchParams }: PageProps<"/rel
       <Cabecalho
         fita="Gerência"
         titulo="Relatórios"
-        descricao="Escolha o período. Pedido cancelado ou recusado não entra em nenhuma conta — aparece à parte."
+        descricao="Escolha o período. Pedido cancelado nunca entra em nenhum número desta tela."
       />
 
       <FiltroPeriodo key={`${periodo.de}:${periodo.ate}`} periodo={periodo} />
 
       <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Cartao
-          rotulo={`Vendido · ${periodo.rotulo.toLowerCase()}`}
+          rotulo="Vendido no período"
           valor={reais(vendido)}
           nota={
             variacao === null
-              ? `${lista.length} pedidos`
+              ? `${lista.length} pedidos · pelo dia do pedido`
               : `${lista.length} pedidos · ${variacao >= 0 ? "+" : ""}${variacao.toFixed(0)}% vs período anterior`
           }
           destaque
         />
         <Cartao
-          rotulo="Ticket médio"
-          valor={reais(ticket)}
+          rotulo="Recebido no período"
+          valor={reais(recebido)}
+          nota="pelo dia em que o dinheiro entrou"
+        />
+        <Cartao rotulo="Ticket médio" valor={reais(ticket)} nota="por pedido" />
+        <Cartao
+          rotulo="Pedidos"
+          valor={String(lista.length)}
           nota={`${porTipo.get("MESA")?.qtd ?? 0} de mesa · ${doQr} pelo QR`}
         />
-        <Cartao
-          rotulo="Recebido"
-          valor={reais(recebido)}
-          nota={
-            aReceber > 0.009
-              ? `faltam ${reais(aReceber)} nas contas abertas`
-              : "tudo recebido"
-          }
-        />
-        <Cartao
-          rotulo="Cancelado"
-          valor={reais(canceladoValor)}
-          nota={`${(cancelados ?? []).length} pedidos não entraram`}
-        />
+      </div>
+
+      {/*
+        A ponte entre os dois primeiros cartões.
+        Sem ela, "recebido maior que vendido" parece defeito do sistema.
+      */}
+      <div className="mb-6">
+        <Secao
+          titulo="De vendido a recebido"
+          nota="Venda conta pelo dia do pedido; caixa conta pelo dia do pagamento. Mesa que fica aberta de um dia pro outro cai nos dois dias diferentes — a conta abaixo fecha no centavo."
+        >
+          {deOutrosDias < 0.009 && emContaAberta < 0.009 && descontoContas < 0.009 ? (
+            <p className="text-sm text-creme-suave">
+              Tudo que foi vendido neste período também foi recebido neste período. Os dois
+              números são iguais: <strong className="tabular text-ouro">{reais(vendido)}</strong>.
+            </p>
+          ) : (
+            <dl className="space-y-2 text-sm">
+              <Linha rotulo="Vendido no período" valor={reais(vendido)} />
+              {deOutrosDias > 0.009 && (
+                <Linha
+                  rotulo="+ recebido agora, de pedido de outro dia"
+                  valor={reais(deOutrosDias)}
+                  destaque
+                />
+              )}
+              {emContaAberta > 0.009 && (
+                <Linha
+                  rotulo="− vendido agora, ainda na conta de mesa aberta"
+                  valor={reais(emContaAberta)}
+                />
+              )}
+              {descontoContas > 0.009 && (
+                <Linha rotulo="− desconto dado no fechamento da conta" valor={reais(descontoContas)} />
+              )}
+              <div className="border-t border-borda pt-2">
+                <Linha rotulo="= Recebido no período" valor={reais(recebido)} forte />
+              </div>
+            </dl>
+          )}
+        </Secao>
       </div>
 
       <div className="mb-6 grid gap-6 lg:grid-cols-2">
@@ -237,10 +314,13 @@ export default async function PaginaRelatorios({ searchParams }: PageProps<"/rel
                   />
                 )}
               </ul>
-              {(descontos > 0.009 || entregas > 0.009) && (
+              {(descontoPedidos + descontoContas > 0.009 || entregas > 0.009) && (
                 <dl className="mt-5 space-y-1.5 border-t border-borda pt-4 text-sm">
-                  {descontos > 0.009 && (
-                    <Linha rotulo="Descontos dados" valor={reais(descontos)} />
+                  {descontoPedidos + descontoContas > 0.009 && (
+                    <Linha
+                      rotulo="Descontos dados"
+                      valor={reais(descontoPedidos + descontoContas)}
+                    />
                   )}
                   {entregas > 0.009 && (
                     <Linha rotulo="Taxas de entrega cobradas" valor={reais(entregas)} />
@@ -356,6 +436,26 @@ export default async function PaginaRelatorios({ searchParams }: PageProps<"/rel
           )}
         </Secao>
       </div>
+
+      {/*
+        Cancelado fica no pé da página, fora dos cartões, e com cara de nota de
+        rodapé: é informação de conferência, não faturamento. Misturado ali em
+        cima parecia que estava somando em algum lugar — e não soma em nenhum.
+      */}
+      {(cancelados ?? []).length > 0 && (
+        <p className="mt-6 border-t border-borda pt-4 text-xs text-creme-fraco">
+          Fora de tudo acima: {(cancelados ?? []).length} pedido(s) cancelado(s) no período,
+          somando <span className="tabular">{reais(canceladoValor)}</span> que não entraram em
+          nenhum número desta tela.{" "}
+          <Link
+            href={`/pedidos?${buscaDoPeriodo(periodo)}`}
+            className="underline hover:text-ouro"
+          >
+            Ver quais foram
+          </Link>
+          .
+        </p>
+      )}
     </div>
   );
 }
@@ -381,11 +481,33 @@ function Secao({
   );
 }
 
-function Linha({ rotulo, valor }: { rotulo: string; valor: string }) {
+function Linha({
+  rotulo,
+  valor,
+  destaque,
+  forte,
+}: {
+  rotulo: string;
+  valor: string;
+  /** A parcela que vem de outro dia: é a resposta de "de onde saiu isso". */
+  destaque?: boolean;
+  forte?: boolean;
+}) {
   return (
-    <div className="flex justify-between">
-      <dt className="text-creme-suave">{rotulo}</dt>
-      <dd className="tabular font-medium text-creme">{valor}</dd>
+    <div className="flex justify-between gap-4">
+      <dt className={destaque ? "text-ouro" : "text-creme-suave"}>{rotulo}</dt>
+      <dd
+        className={
+          "tabular shrink-0 " +
+          (forte
+            ? "font-display text-base font-bold text-ouro"
+            : destaque
+              ? "font-medium text-ouro"
+              : "font-medium text-creme")
+        }
+      >
+        {valor}
+      </dd>
     </div>
   );
 }
