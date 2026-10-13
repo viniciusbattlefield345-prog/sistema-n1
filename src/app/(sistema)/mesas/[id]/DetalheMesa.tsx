@@ -9,6 +9,7 @@ import {
   imprimirConta,
   liberarMesa,
   mandarPraCozinha,
+  reabrirConta,
   reimprimirPedido,
   tentarImpressaoDeNovo,
 } from "../acoes";
@@ -38,11 +39,15 @@ const SITUACAO: Record<StatusPedido, { texto: string; cor: string }> = {
 export function DetalheMesa({
   mesa,
   comanda,
+  ultimaFechada,
+  ehDono,
   caixaAberto,
   impressoes,
 }: {
   mesa: Mesa;
   comanda: Comanda | null;
+  ultimaFechada: Comanda | null;
+  ehDono: boolean;
   caixaAberto: boolean;
   impressoes: TrabalhoImpressao[];
 }) {
@@ -181,14 +186,41 @@ export function DetalheMesa({
       )}
 
       {!comanda ? (
-        <Vazio
-          titulo="Mesa livre"
-          texto="A conta abre sozinha quando o cliente pede pelo QR ou quando alguém da equipe lança um pedido."
-        >
-          <Link href={`/pdv?mesa=${mesa.id}`} className="btn btn-ouro">
-            Lançar pedido
-          </Link>
-        </Vazio>
+        <>
+          <Vazio
+            titulo="Mesa livre"
+            texto="A conta abre sozinha quando o cliente pede pelo QR ou quando alguém da equipe lança um pedido."
+          >
+            <Link href={`/pdv?mesa=${mesa.id}`} className="btn btn-ouro">
+              Lançar pedido
+            </Link>
+          </Vazio>
+
+          {ultimaFechada && (
+            <ContaPaga
+              conta={ultimaFechada}
+              ehDono={ehDono}
+              ocupado={ocupado}
+              aoReabrir={() => {
+                const pago = (ultimaFechada.pagamentos ?? []).reduce(
+                  (s, p) => s + Number(p.valor),
+                  0,
+                );
+                const desconto = Number(ultimaFechada.desconto);
+                const aviso =
+                  `Reabrir a conta da mesa ${mesa.numero}?\n\nOs ${reais(pago)} saem do caixa do dia e a conta volta pra aberta, com os mesmos pedidos. Corrija o que está errado e feche de novo no fim.` +
+                  (desconto > 0
+                    ? `\n\nO desconto de ${reais(desconto)} volta pra zero — digite de novo ao fechar.`
+                    : "");
+                if (!confirm(aviso)) return;
+                acao(
+                  () => reabrirConta(ultimaFechada.id),
+                  "Conta reaberta. Corrija e feche de novo no fim.",
+                );
+              }}
+            />
+          )}
+        </>
       ) : (
         <div className="grid items-start gap-6 lg:grid-cols-[1fr_22rem]">
           <div className="space-y-3">
@@ -288,6 +320,76 @@ export function DetalheMesa({
             )}
           </aside>
         </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A conta que acabou de ser paga nesta mesa.
+ *
+ * Fica logo abaixo do "mesa livre" porque é aqui que a reclamação chega: o
+ * cliente já pagou, olhou o papel na calçada e voltou dizendo que tem coisa
+ * ali que ele não pediu. Em vez de deixar errado no relatório do dia, a conta
+ * volta pra aberta e é corrigida.
+ */
+function ContaPaga({
+  conta,
+  ehDono,
+  ocupado,
+  aoReabrir,
+}: {
+  conta: Comanda;
+  ehDono: boolean;
+  ocupado: boolean;
+  aoReabrir: () => void;
+}) {
+  const pagamentos = conta.pagamentos ?? [];
+  const pago = pagamentos.reduce((s, p) => s + Number(p.valor), 0);
+  const desconto = Number(conta.desconto);
+
+  return (
+    <div className="mt-4 rounded-2xl border border-borda bg-carvao p-5">
+      <p className="text-xs uppercase tracking-wide text-creme-fraco">
+        Última conta desta mesa
+      </p>
+      <p className="mt-1 font-display text-2xl font-extrabold">
+        <span className="tabular">{reais(pago || Number(conta.total) - desconto)}</span>
+        {conta.fechada_em && (
+          <span className="ml-2 text-sm font-normal text-creme-suave">
+            paga às {hora(conta.fechada_em)}
+          </span>
+        )}
+      </p>
+      {pagamentos.length > 0 && (
+        <p className="mt-0.5 text-sm text-creme-suave">
+          {pagamentos
+            .map((p) => `${nomePagamento(p.forma)} ${reais(Number(p.valor))}`)
+            .join(" · ")}
+        </p>
+      )}
+      {desconto > 0 && (
+        <p className="text-sm text-creme-suave">Com desconto de {reais(desconto)}</p>
+      )}
+
+      {ehDono ? (
+        <>
+          <button
+            type="button"
+            className="btn btn-quieto mt-4"
+            disabled={ocupado}
+            onClick={aoReabrir}
+          >
+            Reabrir pra corrigir
+          </button>
+          <p className="mt-2 text-xs text-creme-fraco">
+            Reabrir devolve esta conta pra aberta e tira o pagamento do caixa.
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 text-xs text-creme-fraco">
+          Cobrou errado? Só a dona reabre uma conta já paga.
+        </p>
       )}
     </div>
   );

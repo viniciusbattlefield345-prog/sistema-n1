@@ -47,7 +47,8 @@ async function podeMexer(
     if (conta && conta.status !== "ABERTA")
       return {
         ok: false,
-        erro: "A conta dessa mesa já foi fechada e paga — não dá mais pra mexer no pedido.",
+        erro:
+          "A conta dessa mesa já foi fechada e paga. Pra corrigir, reabra a conta na tela da mesa — só a dona faz isso.",
       };
   }
 

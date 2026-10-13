@@ -251,6 +251,113 @@ export async function fecharConta(
   return { ok: true };
 }
 
+/**
+ * Estorna o fechamento: desfaz o pagamento e devolve a conta pra aberta.
+ *
+ * Existe porque fechar conta é a hora de errar. O cliente olha o papel e diz
+ * que não pediu aquela coca, ou a forma de pagamento foi digitada trocada —
+ * e até agora a única saída era deixar errado. Reabrir devolve a MESMA conta,
+ * com os mesmos pedidos: corrige o que estiver errado e fecha de novo.
+ *
+ * Só o dono, e por um motivo concreto: reabrir tira dinheiro do caixa do dia
+ * na hora (o pagamento é apagado, o relatório cai) e o sistema ainda não
+ * guarda quem fez isso. Enquanto não guardar, a chave fica com uma pessoa só.
+ */
+export async function reabrirConta(comandaId: number): Promise<Resultado> {
+  const { supabase, user } = await sessao();
+  if (!user) return { ok: false, erro: "Sessão expirada. Entre de novo." };
+
+  const { data: perfil } = await supabase
+    .from("perfis")
+    .select("papel")
+    .eq("id", user.id)
+    .single();
+  if (perfil?.papel !== "dono")
+    return { ok: false, erro: "Só a dona pode reabrir uma conta já paga. Chame ela." };
+
+  const { data: comanda } = await supabase
+    .from("comandas")
+    .select("id, mesa_id, caixa_id, status, desconto, fechada_em, fechada_por")
+    .eq("id", comandaId)
+    .maybeSingle();
+  if (!comanda) return { ok: false, erro: "Conta não encontrada." };
+  if (comanda.status === "ABERTA") return { ok: false, erro: "Essa conta já está aberta." };
+  if (comanda.status !== "FECHADA")
+    return { ok: false, erro: "Essa conta foi cancelada, não paga — não há pagamento pra estornar." };
+
+  /**
+   * O caixa que recebeu tem que ser o que ainda está aberto. Caixa fechado já
+   * foi contado e conferido: estornar ali mudaria um número que já foi dado
+   * como certo, e o dinheiro da gaveta não voltaria junto.
+   */
+  const { data: caixa } = await supabase
+    .from("caixas")
+    .select("id")
+    .eq("status", "ABERTO")
+    .maybeSingle();
+  if (!caixa)
+    return { ok: false, erro: "O caixa está fechado. Abra o caixa antes de estornar uma conta." };
+  if (comanda.caixa_id && comanda.caixa_id !== caixa.id)
+    return {
+      ok: false,
+      erro: "Essa conta foi paga num caixa que já foi fechado e conferido. Não dá pra estornar por aqui.",
+    };
+
+  /**
+   * O banco só aceita uma conta aberta por mesa. Se outra turma já sentou,
+   * reabrir a antiga misturaria o consumo das duas na mesma conta.
+   */
+  const { data: jaAberta } = await supabase
+    .from("comandas")
+    .select("id")
+    .eq("mesa_id", comanda.mesa_id)
+    .eq("status", "ABERTA")
+    .maybeSingle();
+  if (jaAberta)
+    return {
+      ok: false,
+      erro: "Essa mesa já tem outra conta aberta. Feche ou libere ela antes de reabrir a anterior.",
+    };
+
+  // Reabre com trava: se duas pessoas tocarem junto, só uma estorna.
+  const { data: reaberta, error } = await supabase
+    .from("comandas")
+    .update({ status: "ABERTA", desconto: 0, fechada_em: null, fechada_por: null })
+    .eq("id", comandaId)
+    .eq("status", "FECHADA")
+    .select("id")
+    .maybeSingle();
+
+  if (error) return { ok: false, erro: error.message };
+  if (!reaberta) return { ok: false, erro: "Essa conta acabou de mudar. Recarregue a tela." };
+
+  /**
+   * Só agora o dinheiro sai do caixa. Se apagar falhar, a conta volta a
+   * fechada exatamente como estava: conta aberta com pagamento ainda no caixa
+   * contaria a venda duas vezes no fechamento do dia.
+   */
+  const { error: erroPagamento } = await supabase
+    .from("pagamentos")
+    .delete()
+    .eq("comanda_id", comandaId);
+
+  if (erroPagamento) {
+    await supabase
+      .from("comandas")
+      .update({
+        status: "FECHADA",
+        desconto: comanda.desconto,
+        fechada_em: comanda.fechada_em,
+        fechada_por: comanda.fechada_por,
+      })
+      .eq("id", comandaId);
+    return { ok: false, erro: erroPagamento.message };
+  }
+
+  atualizarTelas();
+  return { ok: true };
+}
+
 /** Mesa aberta por engano ou com todos os pedidos cancelados. */
 export async function liberarMesa(comandaId: number): Promise<Resultado> {
   const { supabase, user } = await sessao();
