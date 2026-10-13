@@ -1,4 +1,5 @@
 import { criarClienteServidor } from "@/lib/supabase/server";
+import { usuarioAtual } from "@/lib/supabase/sessao";
 import { PainelCaixa } from "./PainelCaixa";
 import type { Caixa, FormaPagamento } from "@/lib/tipos";
 
@@ -8,6 +9,14 @@ export const revalidate = 0;
 
 export default async function PaginaCaixa() {
   const supabase = await criarClienteServidor();
+  const user = await usuarioAtual(supabase);
+
+  // Corrigir valor de caixa e coisa de dono: a tela precisa saber quem olha.
+  const { data: perfil } = await supabase
+    .from("perfis")
+    .select("papel")
+    .eq("id", user!.id)
+    .single();
 
   const { data: aberto } = await supabase
     .from("caixas")
@@ -73,6 +82,7 @@ export default async function PaginaCaixa() {
       quantidade={quantidade}
       mesasAbertas={mesasAbertas}
       historico={(historico ?? []) as Caixa[]}
+      ehDono={perfil?.papel === "dono"}
     />
   );
 }

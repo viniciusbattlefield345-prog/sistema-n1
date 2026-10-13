@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { Fragment, useState, useTransition } from "react";
 import { Cabecalho } from "@/components/Cabecalho";
-import { abrirCaixa, fecharCaixa } from "./acoes";
-import { reais, paraNumero, dataHora } from "@/lib/formato";
+import { useMensagens } from "@/components/Mensagens";
+import { abrirCaixa, editarCaixa, fecharCaixa } from "./acoes";
+import { reais, numero, paraNumero, dataHora } from "@/lib/formato";
 import type { Caixa, FormaPagamento } from "@/lib/tipos";
 import type { ResumoPagamento } from "./page";
 
@@ -14,24 +15,36 @@ const ROTULO: Record<FormaPagamento, string> = {
   "Cartao Credito": "Cartão crédito",
 };
 
+type Recados = {
+  pedir: (p: { titulo: string; texto?: string; confirmar?: string; perigo?: boolean }, aoConfirmar: () => void) => void;
+  sucesso: (t: string) => void;
+  falha: (t: string) => void;
+};
+
 export function PainelCaixa({
   aberto,
   resumo,
   quantidade,
   mesasAbertas,
   historico,
+  ehDono,
 }: {
   aberto: Caixa | null;
   resumo: ResumoPagamento;
   quantidade: number;
   mesasAbertas: { quantidade: number; total: number };
   historico: Caixa[];
+  ehDono: boolean;
 }) {
+  const { pedir, sucesso, falha, painel } = useMensagens();
   const [valorAbertura, setValorAbertura] = useState("");
   const [valorContado, setValorContado] = useState("");
   const [observacao, setObservacao] = useState("");
-  const [erro, setErro] = useState<string | null>(null);
   const [ocupado, iniciar] = useTransition();
+  /** Qual caixa está com o formulário de correção aberto. */
+  const [corrigindo, setCorrigindo] = useState<number | null>(null);
+
+  const recados: Recados = { pedir, sucesso, falha };
 
   const vendas = Object.values(resumo).reduce((s, v) => s + v, 0);
   const esperadoNaGaveta = Number(aberto?.valor_abertura ?? 0) + resumo.Dinheiro;
@@ -39,10 +52,9 @@ export function PainelCaixa({
   const diferenca = valorContado ? contado - esperadoNaGaveta : null;
 
   function acao(fn: () => Promise<{ ok: boolean; erro?: string }>) {
-    setErro(null);
     iniciar(async () => {
       const r = await fn();
-      if (!r.ok) setErro(r.erro ?? "Não deu certo.");
+      if (!r.ok) falha(r.erro ?? "Não deu certo.");
     });
   }
 
@@ -53,15 +65,6 @@ export function PainelCaixa({
         titulo="Caixa"
         descricao="Todo pedido fica amarrado ao caixa do dia. É por isso que o fechamento bate."
       />
-
-      {erro && (
-        <p
-          role="alert"
-          className="mb-5 rounded-lg border border-cancelado/40 bg-cancelado/10 px-3 py-2 text-sm text-cancelado"
-        >
-          {erro}
-        </p>
-      )}
 
       {!aberto ? (
         <div className="max-w-md rounded-2xl border border-borda bg-carvao p-7">
@@ -92,6 +95,9 @@ export function PainelCaixa({
           >
             {ocupado ? "Abrindo…" : "Abrir caixa e começar a vender"}
           </button>
+          <p className="mt-3 text-xs text-creme-fraco">
+            Errou o troco? Dá pra corrigir depois, sem fechar o caixa.
+          </p>
         </div>
       ) : (
         <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
@@ -121,7 +127,27 @@ export function PainelCaixa({
 
             <dl className="space-y-2 text-sm">
               <Linha rotulo={`Recebido neste caixa (${quantidade} vendas)`} valor={vendas} />
-              <Linha rotulo="Abertura (troco inicial)" valor={Number(aberto.valor_abertura)} />
+              <div className="flex items-baseline justify-between gap-3 text-creme-suave">
+                <dt>
+                  Abertura (troco inicial)
+                  {/*
+                    O troco é digitado às pressas na hora de abrir, e um zero
+                    a mais deixa o "esperado na gaveta" errado o dia inteiro.
+                    Por isso a correção está aqui, do lado do número errado,
+                    e não escondida numa tela de configuração.
+                  */}
+                  {ehDono && corrigindo !== aberto.id && (
+                    <button
+                      type="button"
+                      onClick={() => setCorrigindo(aberto.id)}
+                      className="ml-2 text-xs text-creme-fraco underline hover:text-ouro"
+                    >
+                      corrigir
+                    </button>
+                  )}
+                </dt>
+                <dd className="tabular">{reais(Number(aberto.valor_abertura))}</dd>
+              </div>
               <div className="flex items-baseline justify-between border-t border-borda pt-3">
                 <dt className="font-display text-lg uppercase tracking-wide text-creme">
                   Esperado na gaveta
@@ -134,6 +160,20 @@ export function PainelCaixa({
                 Só dinheiro entra nessa conta. Pix e cartão não passam pela gaveta.
               </p>
             </dl>
+
+            {corrigindo === aberto.id && (
+              <Correcao
+                caixa={aberto}
+                recados={recados}
+                aoFechar={() => setCorrigindo(null)}
+              />
+            )}
+
+            {!ehDono && (
+              <p className="mt-4 text-xs text-creme-fraco">
+                Valor de caixa errado? Só a dona corrige. Chame ela.
+              </p>
+            )}
 
             {mesasAbertas.quantidade > 0 && (
               <p className="mt-5 rounded-xl border border-ouro/40 bg-ouro/10 px-4 py-3 text-sm text-ouro">
@@ -202,6 +242,10 @@ export function PainelCaixa({
             >
               {ocupado ? "Fechando…" : "Fechar caixa"}
             </button>
+            <p className="mt-3 text-xs text-creme-fraco">
+              Contou errado? Depois de fechado o valor ainda pode ser corrigido
+              em “Fechamentos anteriores”.
+            </p>
           </div>
         </div>
       )}
@@ -220,28 +264,217 @@ export function PainelCaixa({
                   <th className="px-4 py-3 text-right font-semibold">Abertura</th>
                   <th className="px-4 py-3 text-right font-semibold">Contado</th>
                   <th className="px-4 py-3 font-semibold">Observação</th>
+                  <th className="px-4 py-3" />
                 </tr>
               </thead>
               <tbody>
                 {historico.map((c) => (
-                  <tr key={c.id} className="border-t border-borda/60">
-                    <td className="px-4 py-3 text-creme-suave">{dataHora(c.aberto_em)}</td>
-                    <td className="px-4 py-3 text-creme-suave">
-                      {c.fechado_em ? dataHora(c.fechado_em) : "—"}
-                    </td>
-                    <td className="tabular px-4 py-3 text-right text-creme-suave">
-                      {reais(Number(c.valor_abertura))}
-                    </td>
-                    <td className="tabular px-4 py-3 text-right font-medium text-creme">
-                      {reais(Number(c.valor_fechamento ?? 0))}
-                    </td>
-                    <td className="px-4 py-3 text-creme-fraco">{c.observacao ?? "—"}</td>
-                  </tr>
+                  <Fragment key={c.id}>
+                    <tr className="border-t border-borda/60 align-top">
+                      <td className="px-4 py-3 text-creme-suave">{dataHora(c.aberto_em)}</td>
+                      <td className="px-4 py-3 text-creme-suave">
+                        {c.fechado_em ? dataHora(c.fechado_em) : "—"}
+                      </td>
+                      <td className="tabular px-4 py-3 text-right text-creme-suave">
+                        {reais(Number(c.valor_abertura))}
+                      </td>
+                      <td className="tabular px-4 py-3 text-right font-medium text-creme">
+                        {reais(Number(c.valor_fechamento ?? 0))}
+                      </td>
+                      <td className="whitespace-pre-line px-4 py-3 text-xs leading-relaxed text-creme-fraco">
+                        {c.observacao ?? "—"}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right">
+                        {ehDono && corrigindo !== c.id && (
+                          <button
+                            type="button"
+                            onClick={() => setCorrigindo(c.id)}
+                            className="text-xs text-creme-suave underline hover:text-ouro"
+                          >
+                            Corrigir
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                    {corrigindo === c.id && (
+                      <tr className="border-t border-borda/60">
+                        <td colSpan={6} className="px-4 pb-4">
+                          <Correcao
+                            caixa={c}
+                            recados={recados}
+                            aoFechar={() => setCorrigindo(null)}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
           </div>
         </section>
+      )}
+
+      {painel}
+    </div>
+  );
+}
+
+/**
+ * Corrigir os valores de um caixa.
+ *
+ * Mexer em dinheiro depois do fato pede duas coisas: dizer em voz alta o que
+ * vai mudar (o diálogo repete de quanto pra quanto) e deixar rastro — cada
+ * troca assina embaixo da observação, com quem e quando.
+ *
+ * A frase sobre venda não é consolo: abertura e contagem não entram em
+ * faturamento nenhum. Quem não sabe disso hesita em corrigir, e fica com o
+ * número errado na tela por medo de "estragar o relatório".
+ */
+function Correcao({
+  caixa,
+  recados,
+  aoFechar,
+}: {
+  caixa: Caixa;
+  recados: Recados;
+  aoFechar: () => void;
+}) {
+  const fechado = caixa.status === "FECHADO";
+  const [abertura, setAbertura] = useState(numero(Number(caixa.valor_abertura)));
+  const [contado, setContado] = useState(
+    caixa.valor_fechamento === null ? "" : numero(Number(caixa.valor_fechamento)),
+  );
+  const [observacao, setObservacao] = useState(caixa.observacao ?? "");
+  const [ocupado, iniciar] = useTransition();
+
+  const novaAbertura = paraNumero(abertura);
+  const novoContado = paraNumero(contado);
+  const mudouAbertura = Math.abs(novaAbertura - Number(caixa.valor_abertura)) >= 0.01;
+  const mudouContado =
+    fechado && Math.abs(novoContado - Number(caixa.valor_fechamento ?? 0)) >= 0.01;
+  const mudouObs = observacao.trim() !== (caixa.observacao ?? "").trim();
+  const mudouAlgo = mudouAbertura || mudouContado || mudouObs;
+  /**
+   * Campo em branco não vira zero por conta própria.
+   *
+   * Apagar o conteúdo pra digitar de novo é o gesto mais comum do mundo, e
+   * "" lido como número dá 0 — o troco da gaveta sumiria porque alguém parou
+   * no meio da digitação. Pra zerar, digita-se zero.
+   */
+  const emBranco = abertura.trim() === "" || (fechado && contado.trim() === "");
+
+  function salvar() {
+    const trocas: string[] = [];
+    if (mudouAbertura)
+      trocas.push(
+        `Abertura: ${reais(Number(caixa.valor_abertura))} → ${reais(novaAbertura)}`,
+      );
+    if (mudouContado)
+      trocas.push(
+        `Dinheiro contado: ${reais(Number(caixa.valor_fechamento ?? 0))} → ${reais(novoContado)}`,
+      );
+
+    const gravar = () =>
+      iniciar(async () => {
+        const r = await editarCaixa(caixa.id, {
+          valor_abertura: novaAbertura,
+          ...(fechado ? { valor_fechamento: novoContado } : {}),
+          observacao,
+        });
+        if (!r.ok) return recados.falha(r.erro);
+        recados.sucesso("Caixa corrigido.");
+        aoFechar();
+      });
+
+    // Mudar só a observação é escrever um bilhete; mudar valor é dinheiro.
+    if (trocas.length === 0) return gravar();
+
+    recados.pedir(
+      {
+        titulo: "Corrigir os valores deste caixa?",
+        texto: `${trocas.join(". ")}. A correção fica assinada na observação, com seu nome e a hora. Nenhuma venda muda — abertura e contagem só servem pra conferir a gaveta.`,
+        confirmar: "Corrigir",
+      },
+      gravar,
+    );
+  }
+
+  return (
+    <div className="mt-4 rounded-xl border border-ouro/40 bg-ouro/5 p-4">
+      <p className="rotulo text-ouro">Corrigir valores</p>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className="rotulo" htmlFor={`ab-${caixa.id}`}>
+            Abertura (troco inicial)
+          </label>
+          <input
+            id={`ab-${caixa.id}`}
+            className="campo"
+            inputMode="decimal"
+            value={abertura}
+            onChange={(e) => setAbertura(e.target.value)}
+          />
+        </div>
+
+        {fechado && (
+          <div>
+            <label className="rotulo" htmlFor={`ct-${caixa.id}`}>
+              Dinheiro contado no fechamento
+            </label>
+            <input
+              id={`ct-${caixa.id}`}
+              className="campo"
+              inputMode="decimal"
+              value={contado}
+              onChange={(e) => setContado(e.target.value)}
+            />
+          </div>
+        )}
+      </div>
+
+      <label className="rotulo mt-3" htmlFor={`ob-${caixa.id}`}>
+        Observação
+      </label>
+      <textarea
+        id={`ob-${caixa.id}`}
+        className="campo min-h-20 resize-y"
+        value={observacao}
+        onChange={(e) => setObservacao(e.target.value)}
+        placeholder="Ex: sangria de R$ 50 às 12h"
+      />
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          className="btn btn-ouro px-4 py-2 text-sm"
+          disabled={ocupado || !mudouAlgo || emBranco}
+          onClick={salvar}
+        >
+          {ocupado ? "Salvando…" : "Salvar correção"}
+        </button>
+        <button
+          type="button"
+          className="btn btn-quieto px-4 py-2 text-sm"
+          disabled={ocupado}
+          onClick={aoFechar}
+        >
+          Cancelar
+        </button>
+      </div>
+
+      {emBranco ? (
+        <p className="mt-2 text-xs text-ouro">
+          Campo em branco não vale zero. Pra zerar de verdade, digite 0.
+        </p>
+      ) : (
+        !fechado && (
+          <p className="mt-2 text-xs text-creme-fraco">
+            O dinheiro contado só existe depois que o caixa fecha — por isso ele
+            não aparece aqui.
+          </p>
+        )
       )}
     </div>
   );
