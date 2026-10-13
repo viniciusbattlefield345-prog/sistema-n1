@@ -55,6 +55,16 @@ export function DetalheMesa({
 
   const [fechando, setFechando] = useState(false);
   const [ocupado, iniciar] = useTransition();
+  /**
+   * A conta acabou de ser mandada e o papel ainda está saindo.
+   *
+   * Entre o toque e o papel passam alguns segundos — a fila é lida no
+   * balcão. Sem isto o botão volta na hora com a mesma cara de "não fiz
+   * nada", e com o cliente esperando a mão vai de novo: sai a conta em
+   * dobro. Foi assim que saíram duas vias da cozinha, com 25 segundos de
+   * diferença, na primeira noite.
+   */
+  const [contaSaindo, setContaSaindo] = useState(false);
   const { pedir, sucesso, falha, painel } = useMensagens();
 
   // A lista vem da conta; aqui cada pedido ganha o número da mesa pro rótulo.
@@ -290,10 +300,18 @@ export function DetalheMesa({
                 <button
                   type="button"
                   className="btn btn-quieto"
-                  disabled={ocupado}
-                  onClick={() => acao(() => imprimirConta(comanda.id), "Conta mandada pra impressora.")}
+                  disabled={ocupado || contaSaindo}
+                  onClick={() =>
+                    iniciar(async () => {
+                      const r = await imprimirConta(comanda.id);
+                      if (!r.ok) return falha(r.erro);
+                      setContaSaindo(true);
+                      setTimeout(() => setContaSaindo(false), 6000);
+                      sucesso("Conta mandada pra impressora do balcão.");
+                    })
+                  }
                 >
-                  Imprimir conta
+                  {contaSaindo ? "Saindo no balcão…" : "Imprimir conta"}
                 </button>
                 {impressaoConta && <SituacaoImpressao trabalho={impressaoConta} aoTentarDeNovo={(id) => acao(() => tentarImpressaoDeNovo(id))} />}
 

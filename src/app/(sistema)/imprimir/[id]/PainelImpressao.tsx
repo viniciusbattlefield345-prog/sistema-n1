@@ -110,8 +110,57 @@ export function PainelImpressao({
    * cozinha sai sozinho quando o pedido é lançado, e quem abre esta tela
    * quase sempre quer o que o cliente leva na mão.
    */
-  const [escolha, setEscolha] = useState<Escolha>("CAIXA");
+  const [escolha, escolher] = useState<Escolha>("CAIXA");
   const atual = opcoes.find((o) => o.valor === escolha) ?? opcoes[0];
+
+  /**
+   * O que acabou de ser mandado, e por isso ainda está saindo.
+   *
+   * Entre tocar o botão e o papel aparecer passam alguns segundos: a fila
+   * precisa ser lida no balcão. Se nesse intervalo o botão continuar com a
+   * mesma cara de "ainda não fiz nada", a mão vai de novo — e sai o dobro.
+   * Aconteceu de verdade, duas vias da cozinha com 25 segundos de diferença.
+   *
+   * Então o botão fica travado enquanto o papel está a caminho e diz isso.
+   * Depois ele volta, mas já dizendo "de novo": repetir continua possível
+   * (duas sacolas, uma via a mais pro motoboy), só não acontece sem querer.
+   */
+  const [saindo, setSaindo] = useState<Escolha | null>(null);
+  const [jaMandou, setJaMandou] = useState<Escolha | null>(null);
+
+  /** Trocar o que imprimir é outra ação: o aviso da anterior não vale mais. */
+  function setEscolha(nova: Escolha) {
+    escolher(nova);
+    setSaindo(null);
+    setJaMandou(null);
+  }
+
+  /** Marca que o papel está a caminho e destrava sozinho. */
+  function aCaminho(qual: Escolha) {
+    setSaindo(qual);
+    setJaMandou(qual);
+    setTimeout(() => setSaindo((s) => (s === qual ? null : s)), 6000);
+  }
+
+  const travado = saindo !== null;
+  const rotuloBotao = ocupado
+    ? "Mandando…"
+    : travado
+      ? "Saindo no balcão…"
+      : jaMandou === escolha
+        ? "Imprimir de novo no balcão"
+        : "Imprimir no balcão";
+
+  /**
+   * Já existe um cupom deste mesmo tipo esperando a impressora. Dizer isso
+   * é mais útil do que proibir: às vezes a segunda via é de propósito.
+   */
+  const jaNaFila = impressoes.some(
+    (t) =>
+      t.pedido_id === pedido.id &&
+      (t.via ?? "AUTO") === escolha &&
+      (t.status === "PENDENTE" || t.status === "IMPRIMINDO"),
+  );
 
   const cupom = useMemo(() => {
     if (escolha === "CONTA") {
@@ -129,8 +178,9 @@ export function PainelImpressao({
       if (!alvo) return;
       iniciar(async () => {
         const r = await imprimirConta(alvo.id);
-        if (!r.ok) falha(r.erro);
-        else sucesso("Conta da mesa mandada pra impressora do balcão.");
+        if (!r.ok) return falha(r.erro);
+        aCaminho("CONTA");
+        sucesso("Conta da mesa mandada pra impressora do balcão.");
       });
       return;
     }
@@ -138,16 +188,18 @@ export function PainelImpressao({
     const via = escolha;
     iniciar(async () => {
       const r = await reimprimirPedido(pedido.id, via);
-      if (!r.ok) falha(r.erro);
-      else sucesso(`${ROTULO_VIA[via]} mandada pra impressora do balcão.`);
+      if (!r.ok) return falha(r.erro);
+      aCaminho(via);
+      sucesso(`${ROTULO_VIA[via]} mandada pra impressora do balcão.`);
     });
   }
 
   /** Imprime daqui mesmo, pelo QZ Tray — serve quando a tela Impressão está fechada. */
   async function imprimirAqui() {
-    if (!cupom) return;
+    if (!cupom || travado) return;
     try {
       await imprimirCru(impressoras.impressora, cupom.paraBase64(), impressoras.vias);
+      aCaminho(escolha);
       sucesso("Impresso por este computador.");
     } catch (e) {
       falha(e instanceof Error ? e.message : "Não consegui falar com a impressora.");
@@ -267,9 +319,9 @@ export function PainelImpressao({
           <button
             className="btn btn-ouro"
             onClick={mandarPraFila}
-            disabled={ocupado || !cupom}
+            disabled={ocupado || !cupom || travado}
           >
-            Imprimir no balcão
+            {rotuloBotao}
           </button>
           {/*
             O caminho de reserva: imprime sem passar pela fila, direto no QZ
@@ -280,7 +332,7 @@ export function PainelImpressao({
           <button
             className="btn btn-quieto"
             onClick={imprimirAqui}
-            disabled={!impressoras.impressora || !cupom}
+            disabled={!impressoras.impressora || !cupom || travado}
             title={
               impressoras.impressora
                 ? "Usa o QZ Tray deste computador, sem passar pela fila"
@@ -293,6 +345,16 @@ export function PainelImpressao({
             Ver / salvar em PDF
           </button>
         </div>
+        {travado ? (
+          <p role="status" className="mt-3 text-sm font-semibold text-pronto">
+            Mandado. O papel está saindo no balcão — espere antes de mandar de novo.
+          </p>
+        ) : jaNaFila ? (
+          <p role="status" className="mt-3 text-sm font-semibold text-ouro">
+            Já tem {atual.titulo.toLowerCase()} na fila, esperando a impressora.
+            Mandar de novo faz sair outra.
+          </p>
+        ) : null}
         <p className="mt-2 text-xs text-creme-fraco">
           {cupom
             ? `Abaixo está exatamente o que sai no papel — ${atual.titulo.toLowerCase()}.`

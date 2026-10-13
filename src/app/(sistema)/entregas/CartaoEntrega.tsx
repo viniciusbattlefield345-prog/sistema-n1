@@ -24,6 +24,8 @@ const COR: Partial<Record<StatusPedido, string>> = {
 export function CartaoEntrega({ pedido, indice = 0 }: { pedido: Pedido; indice?: number }) {
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, iniciar] = useTransition();
+  /** Mandado, papel a caminho: segura o segundo toque (ver DetalheMesa). */
+  const [saindo, setSaindo] = useState(false);
 
   const ehEntrega = pedido.tipo === "ENTREGA";
   const troco = Number(pedido.troco_para);
@@ -142,11 +144,19 @@ export function CartaoEntrega({ pedido, indice = 0 }: { pedido: Pedido; indice?:
         )}
         <button
           type="button"
-          disabled={ocupado}
-          onClick={() => acao(() => reimprimirPedido(pedido.id))}
+          disabled={ocupado || saindo}
+          onClick={() => {
+            setErro(null);
+            iniciar(async () => {
+              const r = await reimprimirPedido(pedido.id);
+              if (!r.ok) return setErro(r.erro);
+              setSaindo(true);
+              setTimeout(() => setSaindo(false), 6000);
+            });
+          }}
           className="btn btn-quieto py-3"
         >
-          Reimprimir
+          {saindo ? "Saindo…" : "Reimprimir"}
         </button>
         {/*
           Entrega reimpressa sai com a via do caixa de qualquer jeito — é o
