@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { mudarStatus } from "../cozinha/acoes";
 import { reimprimirPedido } from "../mesas/acoes";
@@ -143,10 +144,22 @@ export function CartaoEntrega({ pedido, indice = 0 }: { pedido: Pedido; indice?:
           type="button"
           disabled={ocupado}
           onClick={() => acao(() => reimprimirPedido(pedido.id))}
-          className={"btn btn-quieto py-3 " + (proximo ? "" : "flex-1")}
+          className="btn btn-quieto py-3"
         >
           Reimprimir
         </button>
+        {/*
+          Entrega reimpressa sai com a via do caixa de qualquer jeito — é o
+          papel da sacola, com endereço e troco. Quando o que falta é outro
+          papel (a via da chapa, por exemplo), é por aqui.
+        */}
+        <Link
+          href={`/imprimir/${pedido.id}`}
+          title="Escolher a via da cozinha, a do caixa, ou as duas"
+          className={"btn btn-quieto py-3 " + (proximo ? "" : "flex-1")}
+        >
+          Vias
+        </Link>
       </div>
     </article>
   );

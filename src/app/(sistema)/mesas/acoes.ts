@@ -5,7 +5,7 @@ import { criarClienteServidor } from "@/lib/supabase/server";
 import { usuarioAtual } from "@/lib/supabase/sessao";
 import { mandarImprimir } from "@/lib/pedido-servidor";
 import { centavos, reais } from "@/lib/formato";
-import type { FormaPagamento } from "@/lib/tipos";
+import type { FormaPagamento, ViaImpressao } from "@/lib/tipos";
 
 export type Resultado = { ok: true } | { ok: false; erro: string };
 
@@ -120,11 +120,21 @@ export async function recusarPedido(id: number, motivo: string): Promise<Resulta
   return { ok: true };
 }
 
-export async function reimprimirPedido(id: number): Promise<Resultado> {
+/**
+ * Manda o cupom de um pedido pra impressora do balcão.
+ *
+ * `via` é o que alguém escolheu na tela: só a da cozinha, só a do caixa, ou
+ * as duas. Sem escolha vale AUTO — o mesmo papel que sai sozinho quando o
+ * pedido é lançado, que é o que os botões de "reimprimir" sempre fizeram.
+ */
+export async function reimprimirPedido(
+  id: number,
+  via: ViaImpressao = "AUTO",
+): Promise<Resultado> {
   const { supabase, user } = await sessao();
   if (!user) return { ok: false, erro: "Sessão expirada. Entre de novo." };
 
-  const r = await mandarImprimir(supabase, { tipo: "PEDIDO", pedido_id: id }, user.id);
+  const r = await mandarImprimir(supabase, { tipo: "PEDIDO", pedido_id: id, via }, user.id);
   atualizarTelas();
   return r;
 }

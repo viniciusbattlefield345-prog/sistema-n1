@@ -10,7 +10,7 @@ import {
   listarImpressoras,
 } from "@/lib/impressora";
 import { cupomDeTeste, viaConta, viaPedido } from "@/lib/cupom";
-import { hora, numeroPedido, rotuloPedido } from "@/lib/formato";
+import { ROTULO_VIA, hora, numeroPedido, rotuloPedido } from "@/lib/formato";
 import { salvarImpressoras } from "../configuracoes/acoes";
 import type {
   Comanda,
@@ -51,9 +51,13 @@ function mensagem(e: unknown) {
 }
 
 function descrever(t: Linha) {
-  if (t.tipo === "CONTA") return `Conta · Mesa ${t.comandas?.mesas?.numero ?? "?"}`;
+  if (t.tipo === "CONTA") return `Conta da mesa ${t.comandas?.mesas?.numero ?? "?"}`;
   if (!t.pedidos) return "Pedido apagado";
-  return `Pedido ${numeroPedido(t.pedidos.numero_dia)} · ${rotuloPedido(t.pedidos)}`;
+  const alvo = `Pedido ${numeroPedido(t.pedidos.numero_dia)} · ${rotuloPedido(t.pedidos)}`;
+  // Via escolhida aparece no nome: assim quem está no balcão sabe, olhando
+  // a fila, se aquele papel era o da chapa ou o do cliente.
+  const via = t.via && t.via !== "AUTO" ? ` · ${ROTULO_VIA[t.via]}` : "";
+  return alvo + via;
 }
 
 export function EstacaoImpressao({
@@ -103,7 +107,9 @@ export function EstacaoImpressao({
           .order("id", { referencedTable: "itens_pedido" })
           .single();
         if (error || !data) throw new Error("O pedido não foi encontrado.");
-        return viaPedido(data as Pedido, restaurante, cfgAtual.current);
+        // A via vem gravada no trabalho: quem escolheu foi quem tocou o
+        // botão, e pode ter sido no celular, longe desta tela.
+        return viaPedido(data as Pedido, restaurante, cfgAtual.current, t.via ?? "AUTO");
       }
 
       const { data, error } = await supabase

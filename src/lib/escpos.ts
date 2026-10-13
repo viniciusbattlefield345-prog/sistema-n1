@@ -53,10 +53,37 @@ function byteDoChar(c: string): number {
     : 0x3f; // '?'
 }
 
+/**
+ * Uma linha do cupom como ela sai no papel.
+ *
+ * Existe pra tela poder mostrar exatamente o que vai ser impresso. A
+ * pre-visualizacao antiga era um HTML escrito a mao, parecido com o cupom
+ * mas feito por outro codigo: bastava alguem mexer num e esquecer o outro
+ * pra tela prometer uma coisa e o papel trazer outra. Agora as duas saem
+ * das mesmas chamadas, e nao ha como divergirem.
+ */
+export interface LinhaCupom {
+  texto: string;
+  /** Multiplicador de largura: 1 normal, 2 dobrada, 3 tripla. */
+  escala: 1 | 2 | 3;
+  negrito: boolean;
+  /** 0 esquerda · 1 centro · 2 direita */
+  alinhar: 0 | 1 | 2;
+  /** Linha de item: sai com o dobro da altura. */
+  alto: boolean;
+  /** Aqui a guilhotina corta — e comeca outra via. */
+  corte: boolean;
+}
+
 export class Cupom {
   private bytes: number[] = [];
   /** Letra dobrada ocupa o dobro da largura: cabe metade das colunas. */
   private escala: 1 | 2 | 3 = 1;
+  /** O mesmo cupom em texto, pra tela mostrar o que vai sair no papel. */
+  private visivel: LinhaCupom[] = [];
+  private forte = false;
+  private lado: 0 | 1 | 2 = 0;
+  private alto = false;
 
   constructor(private colunas = 48) {
     this.inicio();
@@ -68,7 +95,11 @@ export class Cupom {
    * e não uma vez só lá no começo.
    */
   private inicio() {
+    // O `ESC @` zera a impressora; o gerador tem que zerar junto, senao a
+    // tela mostraria negrito ou centralizado onde o papel sai normal.
     this.escala = 1;
+    this.forte = false;
+    this.lado = 0;
     this.cru(ESC, 0x40); // inicializa
     this.cru(ESC, 0x74, 0x02); // página de código CP850
     // Dupla batida: a cabeça aquece cada ponto duas vezes. É o que tira o
@@ -82,6 +113,7 @@ export class Cupom {
    * papéis (cozinha e caixa) numa impressão só: a guilhotina separa.
    */
   novaVia() {
+    this.marcarCorte();
     return this.inicio();
   }
 
@@ -102,10 +134,12 @@ export class Cupom {
 
   /** 0 esquerda · 1 centro · 2 direita */
   alinhar(n: 0 | 1 | 2) {
+    this.lado = n;
     return this.cru(ESC, 0x61, n);
   }
 
   negrito(ligado: boolean) {
+    this.forte = ligado;
     return this.cru(ESC, 0x45, ligado ? 1 : 0);
   }
 
@@ -117,6 +151,14 @@ export class Cupom {
   }
 
   linha(texto = "") {
+    this.visivel.push({
+      texto,
+      escala: this.escala,
+      negrito: this.forte,
+      alinhar: this.lado,
+      alto: this.alto,
+      corte: false,
+    });
     return this.escrever(texto).cru(0x0a);
   }
 
@@ -170,36 +212,91 @@ export class Cupom {
     const primeira = linhas[0];
     const preenchimento = this.largura - prefixo.length - primeira.length - valor.length;
     this.cru(GS, 0x21, ((this.escala - 1) << 4) | (this.escala === 1 ? 1 : this.escala - 1));
+    this.alto = true;
     this.linha(prefixo + primeira + " ".repeat(Math.max(1, preenchimento)) + valor);
     for (const resto of linhas.slice(1)) {
       this.linha(" ".repeat(prefixo.length) + resto);
     }
+    this.alto = false;
     this.cru(GS, 0x21, (this.escala - 1) * 0x11);
     return this;
   }
 
-  /** Texto recuado, pra observação e adicional. */
+  /**
+   * Texto recuado, pra observação e adicional.
+   *
+   * Quebra entre palavras, não no meio delas: a linha que mais precisa ser
+   * lida sem erro é a observação ("sem cebola", "carne bem passada"), e
+   * cortar no meio da palavra é justamente onde a leitura falha. Palavra
+   * sozinha mais larga que o papel ainda é cortada — aí não há alternativa.
+   */
   detalhe(texto: string, recuo = 3) {
-    const largura = this.largura - recuo;
-    for (let i = 0; i < texto.length; i += largura) {
-      this.linha(" ".repeat(recuo) + texto.slice(i, i + largura));
+    const largura = Math.max(1, this.largura - recuo);
+    const margem = " ".repeat(recuo);
+    let atual = "";
+
+    const soltar = () => {
+      if (atual) this.linha(margem + atual);
+      atual = "";
+    };
+
+    for (const palavra of texto.split(/\s+/).filter(Boolean)) {
+      if (!atual) {
+        atual = palavra;
+      } else if (atual.length + 1 + palavra.length <= largura) {
+        atual += " " + palavra;
+      } else {
+        soltar();
+        atual = palavra;
+      }
+      while (atual.length > largura) {
+        this.linha(margem + atual.slice(0, largura));
+        atual = atual.slice(largura);
+      }
     }
+    soltar();
     return this;
   }
 
   pular(n = 1) {
-    for (let i = 0; i < n; i++) this.cru(0x0a);
+    // Pelo `linha`, e nao pelo byte cru: assim a tela tambem ve o espaco.
+    for (let i = 0; i < n; i++) this.linha();
     return this;
   }
 
   /** Aciona a guilhotina. */
   cortar() {
-    return this.pular(4).cru(GS, 0x56, 0x42, 0x00);
+    // Os quatro avancos vao direto nos bytes: na tela eles seriam quatro
+    // linhas vazias no fim do cupom, e o que interessa mostrar e o corte.
+    this.cru(0x0a, 0x0a, 0x0a, 0x0a);
+    this.marcarCorte();
+    return this.cru(GS, 0x56, 0x42, 0x00);
+  }
+
+  private marcarCorte() {
+    const ultima = this.visivel[this.visivel.length - 1];
+    if (!ultima || ultima.corte) return;
+    this.visivel.push({
+      texto: "",
+      escala: 1,
+      negrito: false,
+      alinhar: 1,
+      alto: false,
+      corte: true,
+    });
   }
 
   /** Pulso na gaveta de dinheiro (conector RJ-11 da impressora). */
   abrirGaveta() {
     return this.cru(ESC, 0x70, 0x00, 0x19, 0xfa);
+  }
+
+  /**
+   * O cupom em texto, linha por linha, como a impressora vai imprimir.
+   * E a mesma lista que gerou os bytes — nao uma segunda versao dela.
+   */
+  paraLinhas(): LinhaCupom[] {
+    return this.visivel;
   }
 
   paraBase64(): string {

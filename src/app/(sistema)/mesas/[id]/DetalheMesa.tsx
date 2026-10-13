@@ -11,7 +11,6 @@ import {
   liberarMesa,
   mandarPraCozinha,
   reabrirConta,
-  reimprimirPedido,
   tentarImpressaoDeNovo,
 } from "../acoes";
 import { cancelarPedido, descancelarPedido, removerItem } from "../../pedidos/acoes";
@@ -228,7 +227,6 @@ export function DetalheMesa({
                 pedido={p}
                 impressao={impressoes.find((t) => t.pedido_id === p.id) ?? null}
                 ocupado={ocupado}
-                aoReimprimir={() => acao(() => reimprimirPedido(p.id), "Mandado pra impressora.")}
                 aoMandarPraCozinha={() =>
                   acao(() => mandarPraCozinha([p.id]), "Mandado pra cozinha.")
                 }
@@ -532,7 +530,6 @@ function CartaoPedido({
   pedido,
   impressao,
   ocupado,
-  aoReimprimir,
   aoMandarPraCozinha,
   aoTentarDeNovo,
   aoCancelar,
@@ -542,7 +539,6 @@ function CartaoPedido({
   pedido: Pedido;
   impressao: TrabalhoImpressao | null;
   ocupado: boolean;
-  aoReimprimir: () => void;
   aoMandarPraCozinha: () => void;
   aoTentarDeNovo: (id: number) => void;
   aoCancelar: () => void;
@@ -670,14 +666,18 @@ function CartaoPedido({
                 Mandar pra cozinha
               </button>
             ) : (
-              <button
-                type="button"
-                onClick={aoReimprimir}
-                disabled={ocupado}
+              /*
+                Pra tela do cupom, e nao reimprimindo as cegas daqui: lá dá
+                pra escolher a via da cozinha, a do caixa ou as duas, e ver
+                o papel antes de gastar papel. O "mandar pra cozinha" acima
+                continua sendo um toque — é o que a correria precisa.
+              */
+              <Link
+                href={`/imprimir/${pedido.id}`}
                 className="text-xs text-creme-suave underline hover:text-ouro"
               >
-                Reimprimir
-              </button>
+                Imprimir
+              </Link>
             )}
             {/* Acrescentar no pedido que já existe, em vez de abrir outro. */}
             <Link

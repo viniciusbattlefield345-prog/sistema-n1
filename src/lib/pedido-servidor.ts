@@ -1,5 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { FormaPagamento, OrigemPedido, StatusPedido, TipoPedido } from "./tipos";
+import type {
+  FormaPagamento,
+  OrigemPedido,
+  StatusPedido,
+  TipoPedido,
+  ViaImpressao,
+} from "./tipos";
 
 /**
  * Regras de pedido que valem igual pro PDV da equipe e pro QR da mesa.
@@ -371,12 +377,40 @@ export async function contaDaMesa(
   return { ok: false, erro: error?.message ?? "Não consegui abrir a conta da mesa." };
 }
 
-/** Coloca um cupom na fila da impressora do balcão. */
+/**
+ * Coloca um cupom na fila da impressora do balcão.
+ *
+ * A fila é o que faz "imprimir" funcionar do celular: quem toca pode estar
+ * na mesa 7, e o papel sai no balcão de qualquer jeito.
+ */
 export async function mandarImprimir(
   sb: SupabaseClient,
-  alvo: { tipo: "PEDIDO"; pedido_id: number } | { tipo: "CONTA"; comanda_id: number },
+  alvo:
+    | { tipo: "PEDIDO"; pedido_id: number; via?: ViaImpressao }
+    | { tipo: "CONTA"; comanda_id: number },
   usuarioId: string | null,
 ): Promise<{ ok: true } | Falha> {
-  const { error } = await sb.from("fila_impressao").insert({ ...alvo, pedido_por: usuarioId });
-  return error ? { ok: false, erro: error.message } : { ok: true };
+  /**
+   * `via` só vai pro banco quando alguém escolheu uma: o cupom automático
+   * grava exatamente a mesma linha de sempre, então um banco que ainda não
+   * recebeu a atualização continua imprimindo pedido normalmente.
+   */
+  const corpo: Record<string, unknown> = { ...alvo, pedido_por: usuarioId };
+  if (!corpo.via || corpo.via === "AUTO") delete corpo.via;
+
+  const { error } = await sb.from("fila_impressao").insert(corpo);
+  if (!error) return { ok: true };
+
+  // Coluna `via` ainda não existe no banco. Dizer o que falta é melhor do
+  // que imprimir outra coisa: papel errado na chapa custa um lanche.
+  if (error.code === "PGRST204" && corpo.via) {
+    return {
+      ok: false,
+      erro:
+        "Pra escolher a via pela rede falta aplicar a atualização do banco " +
+        "(supabase/06_via_impressao.sql). No computador do balcão, o botão " +
+        "“Imprimir neste computador” já funciona.",
+    };
+  }
+  return { ok: false, erro: error.message };
 }

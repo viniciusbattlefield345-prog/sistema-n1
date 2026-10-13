@@ -300,6 +300,10 @@ create index on item_adicionais (item_id);
 create table fila_impressao (
   id             bigint generated always as identity primary key,
   tipo           text not null check (tipo in ('PEDIDO','CONTA')),
+  -- Qual via sai no papel. AUTO = o que esta em Configuracoes, que e o
+  -- cupom automatico; as outras sao escolha de quem tocou o botao.
+  via            text not null default 'AUTO'
+                 check (via in ('AUTO','COZINHA','CAIXA','TUDO')),
   pedido_id      bigint references pedidos(id) on delete cascade,
   comanda_id     bigint references comandas(id) on delete cascade,
   status         text not null default 'PENDENTE'
@@ -311,7 +315,9 @@ create table fila_impressao (
   atualizado_em  timestamptz not null default now(),
   constraint impressao_tem_alvo check (
     (tipo = 'PEDIDO' and pedido_id is not null) or
-    (tipo = 'CONTA'  and comanda_id is not null))
+    (tipo = 'CONTA'  and comanda_id is not null)),
+  -- A conta da mesa e uma so: nao tem duas vias.
+  constraint impressao_via_so_de_pedido check (tipo = 'PEDIDO' or via = 'AUTO')
 );
 create index on fila_impressao (status, criado_em);
 create index on fila_impressao (pedido_id);

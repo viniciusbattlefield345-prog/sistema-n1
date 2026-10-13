@@ -1,4 +1,4 @@
-import type { FormaPagamento, ItemCarrinho, TipoPedido } from "./tipos";
+import type { FormaPagamento, ItemCarrinho, TipoPedido, ViaImpressao } from "./tipos";
 
 const MOEDA = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -86,6 +86,18 @@ const NOME_PAGAMENTO: Record<FormaPagamento, string> = {
 
 /** "Cartao Debito" -> "Cartão débito" */
 export const nomePagamento = (f: FormaPagamento) => NOME_PAGAMENTO[f] ?? f;
+
+/**
+ * Como cada via é chamada na tela. Fica aqui, e não em cada tela, porque a
+ * fila de impressão, o painel do pedido e o recado de sucesso têm que usar
+ * a mesma palavra — senão quem toca o botão não reconhece o que saiu.
+ */
+export const ROTULO_VIA: Record<ViaImpressao, string> = {
+  AUTO: "cupom do pedido",
+  COZINHA: "via da cozinha",
+  CAIXA: "via do caixa",
+  TUDO: "as duas vias",
+};
 
 /** Como o pedido é chamado na tela e no papel: "Mesa 5", "Entrega", "Retirada". */
 export function rotuloPedido(p: {

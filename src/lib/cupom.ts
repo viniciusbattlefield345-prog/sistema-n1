@@ -14,6 +14,7 @@ import type {
   ConfigRestaurante,
   ItemPedido,
   Pedido,
+  ViaImpressao,
 } from "./tipos";
 
 const dia = (iso: string) =>
@@ -27,6 +28,9 @@ function valorDoItem(item: ItemPedido): number {
   return Number(item.quantidade) * (Number(item.preco_unitario) + extras);
 }
 
+const descricaoDoItem = (item: ItemPedido) =>
+  item.variacao_nome ? `${item.produto_nome} (${item.variacao_nome})` : item.produto_nome;
+
 function cabecalho(c: Cupom, restaurante: ConfigRestaurante) {
   c.titulo(restaurante.nome || "GENERAL BURGUER");
   c.alinhar(1);
@@ -36,17 +40,70 @@ function cabecalho(c: Cupom, restaurante: ConfigRestaurante) {
   c.alinhar(0);
 }
 
+/**
+ * O que o cliente não quer, ou quer diferente.
+ *
+ * Esta linha é a razão de o papel existir. Preço errado o caixa confere
+ * antes de cobrar; "sem cebola" não tem segunda conferência — se não estiver
+ * no papel, o lanche volta. Por isso ela nunca é opcional, sai em negrito,
+ * em maiúscula e com a seta na frente, e na via da cozinha vem no mesmo
+ * tamanho do item: é uma instrução, não um comentário.
+ */
+function observacaoDoItem(c: Cupom, texto: string, grande = false) {
+  if (grande) c.tamanho(2);
+  c.negrito(true).detalhe(`>> ${texto.toUpperCase()}`, grande ? 1 : 3).negrito(false);
+  if (grande) c.tamanho(1);
+}
+
+/**
+ * A observação do pedido inteiro: "tudo sem cebola", "embalar separado".
+ *
+ * Negrito do título até a última linha do texto, igual à observação de item:
+ * as duas dizem a mesma coisa pra quem lê, e lê correndo.
+ */
+function observacaoDoPedido(c: Cupom, pedido: Pedido, grande = false) {
+  if (!pedido.observacao) return;
+  // Mesmo recuo do texto e das observacoes de item: na conta da mesa o
+  // bloco fica visivelmente preso ao pedido de quem pediu.
+  c.negrito(true).detalhe("OBSERVACAO DO PEDIDO", 1);
+  if (grande) c.tamanho(2);
+  c.detalhe(pedido.observacao.toUpperCase(), 1);
+  if (grande) c.tamanho(1);
+  c.negrito(false);
+}
+
+/**
+ * O aviso que muda o que fazer com o papel.
+ *
+ * Reimprimir pedido cancelado é coisa de todo dia — é o papel que mostra ao
+ * cliente o que saiu da conta. O risco é esse papel chegar na chapa sem
+ * dizer que foi cancelado: alguém monta o lanche e ele sai de graça. Por
+ * isso o selo vem antes dos itens, em letra dobrada.
+ */
+function avisoDoEstado(pedido: Pedido, onde: "COZINHA" | "CAIXA"): string[] {
+  const acao = onde === "COZINHA" ? "NAO PRODUZIR" : "NAO COBRAR";
+  if (pedido.status === "CANCELADO") return ["*** CANCELADO ***", acao];
+  if (pedido.status === "AGUARDANDO") return ["NAO APROVADO AINDA", acao];
+  return [];
+}
+
+function selo(c: Cupom, linhas: string[]) {
+  if (linhas.length === 0) return;
+  c.separador("=").alinhar(1).negrito(true).tamanho(2);
+  for (const l of linhas) c.linha(l);
+  c.tamanho(1).negrito(false).alinhar(0);
+}
+
 function listaDeItens(c: Cupom, itens: ItemPedido[]) {
   for (const item of itens) {
-    const descricao = item.variacao_nome
-      ? `${item.produto_nome} (${item.variacao_nome})`
-      : item.produto_nome;
-    c.negrito(true).item(Number(item.quantidade), descricao, numero(valorDoItem(item)));
+    c.negrito(true).item(
+      Number(item.quantidade),
+      descricaoDoItem(item),
+      numero(valorDoItem(item)),
+    );
     c.negrito(false);
     for (const extra of item.item_adicionais ?? []) c.detalhe("+ " + extraComVezes(extra));
-    if (item.observacao) {
-      c.negrito(true).detalhe(`>> ${item.observacao.toUpperCase()}`).negrito(false);
-    }
+    if (item.observacao) observacaoDoItem(c, item.observacao);
   }
 }
 
@@ -58,26 +115,20 @@ function totalGrande(c: Cupom, rotulo: string, valor: number) {
 /** Só o que a cozinha precisa: quantidade, produto, adicional e observação. */
 function listaDeItensCozinha(c: Cupom, itens: ItemPedido[]) {
   for (const item of itens) {
-    const descricao = item.variacao_nome
-      ? `${item.produto_nome} (${item.variacao_nome})`
-      : item.produto_nome;
-    c.tamanho(2).negrito(true).item(Number(item.quantidade), descricao.toUpperCase(), "");
+    c.tamanho(2).negrito(true).item(
+      Number(item.quantidade),
+      descricaoDoItem(item).toUpperCase(),
+      "",
+    );
     c.tamanho(1).negrito(false);
     for (const extra of item.item_adicionais ?? []) c.detalhe("+ " + extraComVezes(extra));
-    if (item.observacao) {
-      c.negrito(true).detalhe(`>> ${item.observacao.toUpperCase()}`).negrito(false);
-    }
+    if (item.observacao) observacaoDoItem(c, item.observacao, true);
   }
 }
 
 /**
- * A via da cozinha: nenhum preço. Quem está na chapa não precisa saber quanto
- * custa — precisa enxergar o que montar de longe, com a mão ocupada. Por isso
- * o item vai em letra dobrada e o resto é enxuto.
- */
-/**
  * O que a chapa tem a fazer deste pedido. Bebida fica de fora: ela sai da
- * geladeira, e um papel a mais na cozinha e um papel que atrapalha.
+ * geladeira, e um papel a mais na cozinha é um papel que atrapalha.
  *
  * Item antigo, gravado antes desta regra existir, vem sem o campo e conta
  * como cozinha — era assim que ele era impresso quando foi feito.
@@ -86,19 +137,25 @@ function itensDaCozinha(pedido: Pedido): ItemPedido[] {
   return (pedido.itens_pedido ?? []).filter((i) => i.vai_pra_cozinha !== false);
 }
 
+/**
+ * A via da cozinha: nenhum preço. Quem está na chapa não precisa saber
+ * quanto custa — precisa enxergar o que montar de longe, com a mão ocupada.
+ * Por isso o item vai em letra dobrada e o resto é enxuto.
+ */
 function corpoCozinha(c: Cupom, pedido: Pedido) {
   c.alinhar(1).negrito(true).tamanho(2).linha("COZINHA");
   c.tamanho(3).linha(rotuloPedido(pedido).toUpperCase());
   c.tamanho(2).linha(`PEDIDO ${numeroPedido(pedido.numero_dia)}`);
   c.tamanho(1).negrito(false).linha(hora(pedido.criado_em));
-  c.alinhar(0).separador("=");
+  c.alinhar(0);
+  selo(c, avisoDoEstado(pedido, "COZINHA"));
+  c.separador("=");
 
   listaDeItensCozinha(c, itensDaCozinha(pedido));
 
   if (pedido.observacao) {
     c.separador();
-    c.negrito(true).linha("OBSERVACAO DO PEDIDO:").negrito(false);
-    c.detalhe(pedido.observacao, 0);
+    observacaoDoPedido(c, pedido, true);
   }
   c.separador("=");
 }
@@ -119,7 +176,9 @@ function corpoCaixa(c: Cupom, pedido: Pedido, restaurante: ConfigRestaurante) {
   c.tamanho(1).negrito(false);
   c.linha(`${dia(pedido.criado_em)} ${hora(pedido.criado_em)}`);
   if (pedido.origem === "CLIENTE") c.linha("Feito pelo cliente no QR da mesa");
-  c.alinhar(0).separador();
+  c.alinhar(0);
+  selo(c, avisoDoEstado(pedido, "CAIXA"));
+  c.separador();
 
   // Pedido de mesa sem nome ganha "Mesa 5" como nome: repetir seria ruído.
   const nomeProprio = pedido.cliente_nome && pedido.cliente_nome !== rotulo;
@@ -135,8 +194,7 @@ function corpoCaixa(c: Cupom, pedido: Pedido, restaurante: ConfigRestaurante) {
 
   if (pedido.observacao) {
     c.separador();
-    c.negrito(true).linha("OBSERVACAO DO PEDIDO:").negrito(false);
-    c.detalhe(pedido.observacao, 0);
+    observacaoDoPedido(c, pedido);
   }
 
   c.separador();
@@ -163,20 +221,28 @@ function corpoCaixa(c: Cupom, pedido: Pedido, restaurante: ConfigRestaurante) {
 }
 
 /**
- * O cupom de um pedido aprovado. Sai em duas vias num envio só — a da cozinha
- * e a do caixa — separadas pela guilhotina. Quem quiser uma só desliga a
- * outra em Configurações.
+ * Quais vias saem, pra uma escolha de via.
+ *
+ * Esta função é a única que decide — a tela usa ela pra dizer o que o botão
+ * vai fazer, e o cupom usa ela pra montar o papel. Enquanto as duas coisas
+ * vierem daqui, o botão não pode prometer uma via que não sai.
+ *
+ *  AUTO    o que está em Configurações: é como o cupom sai sozinho quando o
+ *          pedido é lançado ou aprovado.
+ *  COZINHA · CAIXA · TUDO  o que alguém pediu no botão. Aqui a configuração
+ *          não entra: ela governa o papel automático, não o papel que uma
+ *          pessoa acabou de pedir na tela.
  */
-export function viaPedido(
+export function oQueSai(
   pedido: Pedido,
-  restaurante: ConfigRestaurante,
   cfg: ConfigImpressoras,
-  opcoes?: {
-    /** Só a via do caixa: a conta pra entregar na mão do cliente, no fim. */
-    soCaixa?: boolean;
-  },
-): string {
-  const c = new Cupom(cfg.colunas);
+  via: ViaImpressao = "AUTO",
+): { cozinha: boolean; caixa: boolean } {
+  const temCozinha = itensDaCozinha(pedido).length > 0;
+
+  if (via === "COZINHA") return { cozinha: temCozinha, caixa: false };
+  if (via === "CAIXA") return { cozinha: false, caixa: true };
+  if (via === "TUDO") return { cozinha: temCozinha, caixa: true };
 
   /**
    * Entrega SEMPRE leva a via do caixa, mesmo com ela desligada.
@@ -188,25 +254,38 @@ export function viaPedido(
    * Mesa e retirada seguem a configuração: ali o cliente está na casa, e a
    * conta sai quando ele pede, não quando a cozinha recebe.
    */
-  const caixa =
-    opcoes?.soCaixa || pedido.tipo === "ENTREGA" || cfg.via_caixa || !cfg.via_cozinha;
-  const temCozinha = !opcoes?.soCaixa && itensDaCozinha(pedido).length > 0;
+  return {
+    cozinha: cfg.via_cozinha && temCozinha,
+    caixa: pedido.tipo === "ENTREGA" || cfg.via_caixa || !cfg.via_cozinha,
+  };
+}
 
-  /**
-   * Pedido so de bebida, com a via do caixa desligada: nao ha o que imprimir.
-   * Devolver vazio e a forma de dizer "nao gaste papel" — a estacao entende
-   * e marca como impresso sem acionar a impressora.
-   */
-  if (!temCozinha && !caixa) return "";
+/**
+ * O cupom de um pedido, montado. `null` quando não há o que imprimir —
+ * pedido só de bebida com a via do caixa desligada, por exemplo.
+ *
+ * Devolve o Cupom, e não os bytes, porque a tela mostra as mesmas linhas
+ * que vão pro papel. Quem só quer imprimir usa `viaPedido`.
+ */
+export function montarPedido(
+  pedido: Pedido,
+  restaurante: ConfigRestaurante,
+  cfg: ConfigImpressoras,
+  via: ViaImpressao = "AUTO",
+): Cupom | null {
+  const sai = oQueSai(pedido, cfg, via);
+  if (!sai.cozinha && !sai.caixa) return null;
 
-  if (cfg.via_cozinha && temCozinha) {
+  const c = new Cupom(cfg.colunas);
+
+  if (sai.cozinha) {
     corpoCozinha(c, pedido);
     if (cfg.cortar) c.cortar();
     else c.pular(3);
-    if (caixa) c.novaVia();
+    if (sai.caixa) c.novaVia();
   }
 
-  if (caixa) {
+  if (sai.caixa) {
     corpoCaixa(c, pedido, restaurante);
     if (cfg.abrir_gaveta && pedido.tipo !== "MESA" && pedido.forma_pagamento === "Dinheiro") {
       c.abrirGaveta();
@@ -214,30 +293,85 @@ export function viaPedido(
     if (cfg.cortar) c.cortar();
   }
 
-  return c.paraBase64();
+  return c;
 }
 
-/** A conta da mesa: tudo que foi aprovado, somado. Sai quando o cliente pede a conta. */
-export function viaConta(
+/**
+ * Os bytes do cupom de um pedido. Vazio = não há o que imprimir; a estação
+ * entende e tira da fila sem acionar a impressora.
+ */
+export function viaPedido(
+  pedido: Pedido,
+  restaurante: ConfigRestaurante,
+  cfg: ConfigImpressoras,
+  via: ViaImpressao = "AUTO",
+): string {
+  return montarPedido(pedido, restaurante, cfg, via)?.paraBase64() ?? "";
+}
+
+/**
+ * A conta da mesa: tudo que foi aprovado, somado. Sai quando o cliente pede
+ * a conta — e é o papel que ele confere item por item antes de pagar.
+ */
+export function montarConta(
   comanda: Comanda,
   restaurante: ConfigRestaurante,
   cfg: ConfigImpressoras,
-): string {
+): Cupom {
   const c = new Cupom(cfg.colunas);
+  const mesa = `Mesa ${comanda.mesas?.numero ?? ""}`.trim();
 
   cabecalho(c, restaurante);
   c.separador("=");
-  c.alinhar(1).negrito(true).tamanho(3).linha(`MESA ${comanda.mesas?.numero ?? ""}`.trim());
+  c.alinhar(1).negrito(true).tamanho(3).linha(mesa.toUpperCase());
   c.tamanho(2).linha("CONTA").tamanho(1).negrito(false);
   c.linha(`${dia(comanda.aberta_em)} · aberta às ${hora(comanda.aberta_em)}`);
-  c.alinhar(0).separador("=");
+  c.alinhar(0);
 
-  const pedidos = (comanda.pedidos ?? [])
+  // Conta reimpressa depois de paga não pode parecer conta a pagar.
+  if (comanda.status === "FECHADA") selo(c, ["*** CONTA PAGA ***"]);
+  if (comanda.status === "CANCELADA") selo(c, ["CONTA CANCELADA"]);
+  c.separador("=");
+
+  const todos = comanda.pedidos ?? [];
+  const pedidos = todos
     .filter((p) => p.status !== "AGUARDANDO" && p.status !== "CANCELADO")
     .sort((a, b) => a.criado_em.localeCompare(b.criado_em));
 
   if (pedidos.length === 0) c.linha("Nenhum pedido aprovado.");
-  for (const p of pedidos) listaDeItens(c, p.itens_pedido ?? []);
+
+  /**
+   * Mesa de quatro pessoas vira uma lista longa, e a reclamação clássica é
+   * "isso aqui não é meu". Com mais de um pedido na conta, cada bloco diz
+   * de quem é e de que hora — é assim que o cliente acha o dele no papel, e
+   * é o que torna possível conferir contra a via de um pedido só.
+   */
+  const varios = pedidos.length > 1;
+  for (const p of pedidos) {
+    if (varios) {
+      const nome = p.cliente_nome && !p.cliente_nome.startsWith("Mesa ") ? ` · ${p.cliente_nome}` : "";
+      c.negrito(true).linha(`Pedido ${numeroPedido(p.numero_dia)}${nome} · ${hora(p.criado_em)}`);
+      c.negrito(false);
+    }
+    listaDeItens(c, p.itens_pedido ?? []);
+    if (p.observacao) observacaoDoPedido(c, p);
+    if (varios) c.pular();
+  }
+
+  /**
+   * Pedido que o cliente fez no QR e ninguém aprovou ainda não está somado
+   * em lugar nenhum — nem aqui, nem no total da mesa. Cobrar esta conta sem
+   * saber disso é entregar comida de graça, então o papel avisa.
+   */
+  const esperando = todos.filter((p) => p.status === "AGUARDANDO");
+  if (esperando.length > 0) {
+    c.separador();
+    c.negrito(true).linha("ATENCAO").negrito(false);
+    c.detalhe(
+      `${esperando.length} pedido(s) desta mesa esperam aprovacao e NAO estao somados aqui.`,
+      1,
+    );
+  }
 
   const total = Number(comanda.total);
   const desconto = Number(comanda.desconto);
@@ -259,7 +393,15 @@ export function viaConta(
   if (restaurante.instagram) c.linha(restaurante.instagram);
   c.linha("Não é documento fiscal").alinhar(0);
   if (cfg.cortar) c.cortar();
-  return c.paraBase64();
+  return c;
+}
+
+export function viaConta(
+  comanda: Comanda,
+  restaurante: ConfigRestaurante,
+  cfg: ConfigImpressoras,
+): string {
+  return montarConta(comanda, restaurante, cfg).paraBase64();
 }
 
 /** Cupom curtinho só pra confirmar que a impressora responde. */
@@ -272,7 +414,7 @@ export function cupomDeTeste(restaurante: ConfigRestaurante, cfg: ConfigImpresso
   c.separador();
   c.negrito(true).item(2, "X Bacon", "50,00").negrito(false);
   c.detalhe("+ 2x Bacon");
-  c.negrito(true).detalhe(">> SEM CEBOLA").negrito(false);
+  observacaoDoItem(c, "sem cebola");
   c.separador();
   totalGrande(c, "TOTAL", 50);
   c.separador("=");

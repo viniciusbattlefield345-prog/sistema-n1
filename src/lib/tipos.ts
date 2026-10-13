@@ -207,10 +207,26 @@ export interface Pedido {
 
 export type StatusImpressao = "PENDENTE" | "IMPRIMINDO" | "IMPRESSO" | "ERRO";
 
+/**
+ * Quais vias de um pedido saem no papel.
+ *
+ *  AUTO     o que está em Configurações — é o cupom que sai sozinho quando
+ *           o pedido é lançado ou aprovado.
+ *  COZINHA  só o que montar, sem nenhum preço.
+ *  CAIXA    só a com preço, total e pagamento (a que o cliente leva).
+ *  TUDO     as duas, separadas pela guilhotina.
+ */
+export type ViaImpressao = "AUTO" | "COZINHA" | "CAIXA" | "TUDO";
+
 /** Um cupom esperando a impressora do balcão. */
 export interface TrabalhoImpressao {
   id: number;
   tipo: "PEDIDO" | "CONTA";
+  /**
+   * Opcional porque a coluna nasceu depois: cupom gravado antes dela, e
+   * banco que ainda não recebeu a atualização, valem como AUTO.
+   */
+  via?: ViaImpressao | null;
   pedido_id: number | null;
   comanda_id: number | null;
   status: StatusImpressao;
