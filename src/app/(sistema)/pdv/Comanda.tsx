@@ -1,6 +1,6 @@
 "use client";
 
-import { extraComVezes, numero, totalItem } from "@/lib/formato";
+import { extraComVezes, numero, numeroPedido, totalItem } from "@/lib/formato";
 import type { ItemCarrinho, TipoPedido } from "@/lib/tipos";
 
 /**
@@ -16,6 +16,7 @@ export function Comanda({
   endereco,
   taxa,
   desconto,
+  acrescentandoA,
   aoRemover,
   aoMudarQuantidade,
 }: {
@@ -26,11 +27,19 @@ export function Comanda({
   endereco: string;
   taxa: number;
   desconto: number;
+  /**
+   * O pedido que já existe, quando esta comanda está acrescentando itens a
+   * ele. Sem isto, o total grande mostrava só o que estava sendo
+   * acrescentado — e um "R$ 0,00" gigante em cima de um pedido de R$ 63
+   * parece defeito, não cálculo.
+   */
+  acrescentandoA?: { numero_dia: number | null; total: number } | null;
   aoRemover: (chave: string) => void;
   aoMudarQuantidade: (chave: string, delta: number) => void;
 }) {
   const subtotal = itens.reduce((s, i) => s + totalItem(i), 0);
-  const total = Math.max(subtotal + taxa - desconto, 0);
+  const jaNoPedido = acrescentandoA ? Number(acrescentandoA.total) : 0;
+  const total = Math.max(jaNoPedido + subtotal + taxa - desconto, 0);
   const rotulo =
     tipo === "MESA" ? (mesaNumero ? `MESA ${mesaNumero}` : "MESA —") : tipo;
 
@@ -47,7 +56,7 @@ export function Comanda({
 
       <div className="flex justify-between text-[0.72rem] text-creme-suave">
         <span className="font-bold text-creme">{rotulo}</span>
-        <span>Pedido #—</span>
+        <span>{acrescentandoA ? `Pedido ${numeroPedido(acrescentandoA.numero_dia)}` : "Pedido #—"}</span>
       </div>
 
       {clienteNome.trim() ? (
@@ -65,7 +74,9 @@ export function Comanda({
       <div className="-mr-2 min-h-0 flex-1 overflow-y-auto pr-2">
         {itens.length === 0 ? (
           <p className="py-10 text-center text-[0.75rem] text-creme-fraco">
-            Toque num produto para começar o pedido.
+            {acrescentandoA
+              ? "Toque num produto para acrescentar a este pedido."
+              : "Toque num produto para começar o pedido."}
           </p>
         ) : (
           <ul className="flex flex-col gap-2.5">
@@ -135,13 +146,16 @@ export function Comanda({
       <div className="cupom-linha-forte my-2" />
 
       <div className="flex flex-col gap-1 text-[0.78rem]">
-        <Linha rotulo="Subtotal" valor={subtotal} />
+        {acrescentandoA && <Linha rotulo="Já no pedido" valor={jaNoPedido} />}
+        <Linha rotulo={acrescentandoA ? "Acrescentando" : "Subtotal"} valor={subtotal} />
         {taxa > 0 && <Linha rotulo="Taxa de entrega" valor={taxa} />}
         {desconto > 0 && <Linha rotulo="Desconto" valor={-desconto} />}
       </div>
 
       <div className="mt-2 flex items-baseline justify-between border-t-2 border-borda-forte pt-2">
-        <span className="font-display text-lg font-bold uppercase tracking-wide">Total</span>
+        <span className="font-display text-lg font-bold uppercase tracking-wide">
+          {acrescentandoA ? "Fica" : "Total"}
+        </span>
         <span className="font-display text-3xl font-extrabold text-ouro tabular">
           {numero(total)}
         </span>

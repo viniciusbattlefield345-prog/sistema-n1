@@ -649,6 +649,11 @@ export function PainelPdv({
           endereco={endereco}
           taxa={taxa}
           desconto={0}
+          acrescentandoA={
+            pedidoEditando
+              ? { numero_dia: pedidoEditando.numero_dia, total: Number(pedidoEditando.total) }
+              : null
+          }
           aoRemover={(chave) =>
             setItens((atual) => atual.filter((i) => i.chave !== chave))
           }
@@ -743,13 +748,19 @@ export function PainelPdv({
         className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-between border-t border-borda bg-carvao px-4 py-3 lg:hidden"
       >
         <span className="text-sm text-creme-suave">
-          {itens.length === 0
-            ? "Nenhum item"
-            : `${itens.length} ${itens.length === 1 ? "item" : "itens"} na comanda`}
+          {editando
+            ? itens.length === 0
+              ? `Pedido ${numeroPedido(pedidoEditando.numero_dia)} · nada acrescentado ainda`
+              : `+${itens.length} ${itens.length === 1 ? "item" : "itens"} neste pedido`
+            : itens.length === 0
+              ? "Nenhum item"
+              : `${itens.length} ${itens.length === 1 ? "item" : "itens"} na comanda`}
         </span>
         <span className="flex items-center gap-3">
+          {/* Editando, o número grande é quanto o pedido FICA — não o que
+              está sendo acrescentado. É o que a pessoa vai cobrar. */}
           <span className="tabular font-display text-xl font-bold text-ouro">
-            {reais(total)}
+            {reais(editando ? Number(pedidoEditando.total) + total : total)}
           </span>
           <span className="rounded-lg bg-ouro/15 px-3 py-1.5 text-xs font-semibold text-ouro">
             Ver comanda
