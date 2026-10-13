@@ -266,10 +266,24 @@ export function ListaPedidos({
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
+                        {/*
+                          Editar abre o PDV em cima deste pedido: o cardápio
+                          inteiro pra acrescentar, e o − + ✕ pra corrigir o que
+                          já está lá. Vale pra mesa, entrega e retirada.
+                        */}
+                        {edicao.pode && p.status !== "CANCELADO" && (
+                          <Link
+                            href={`/pdv?pedido=${p.id}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-xs font-semibold text-ouro underline hover:text-ouro"
+                          >
+                            Editar
+                          </Link>
+                        )}
                         <Link
                           href={`/imprimir/${p.id}`}
                           onClick={(e) => e.stopPropagation()}
-                          className="text-xs text-creme-suave underline hover:text-ouro"
+                          className="ml-4 text-xs text-creme-suave underline hover:text-ouro"
                         >
                           Imprimir
                         </Link>

@@ -82,15 +82,23 @@ export function PainelImpressao({
             {pedido.forma_pagamento && ` · ${nomePagamento(pedido.forma_pagamento)}`}
           </p>
         </div>
-        {pedido.tipo === "MESA" && pedido.mesa_id ? (
-          <Link href={`/mesas/${pedido.mesa_id}`} className="btn btn-quieto shrink-0">
-            Voltar pra mesa
-          </Link>
-        ) : (
-          <Link href="/pdv" className="btn btn-quieto shrink-0">
-            Novo pedido
-          </Link>
-        )}
+        <span className="flex shrink-0 gap-2">
+          {/* O cliente ligou de volta pedindo mais uma coisa: entra por aqui. */}
+          {pedido.status !== "CANCELADO" && (
+            <Link href={`/pdv?pedido=${pedido.id}`} className="btn btn-ouro shrink-0">
+              Acrescentar item
+            </Link>
+          )}
+          {pedido.tipo === "MESA" && pedido.mesa_id ? (
+            <Link href={`/mesas/${pedido.mesa_id}`} className="btn btn-quieto shrink-0">
+              Voltar pra mesa
+            </Link>
+          ) : (
+            <Link href="/pedidos" className="btn btn-quieto shrink-0">
+              Pedidos
+            </Link>
+          )}
+        </span>
       </div>
 
       {/* situação na fila da impressora */}

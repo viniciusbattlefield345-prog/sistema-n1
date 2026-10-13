@@ -4,10 +4,17 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { gravarRascunho, lerRascunho, limparRascunho } from "./rascunho";
 import { Comanda } from "./Comanda";
+import { ItensDoPedido } from "./ItensDoPedido";
 import { ModalItem } from "./ModalItem";
 import { FormularioCliente } from "../clientes/FormularioCliente";
-import { salvarPedido } from "./acoes";
-import { reais, telefone as formatarTelefone } from "@/lib/formato";
+import { salvarPedido, type ItemEnviado } from "./acoes";
+import { acrescentarItens } from "../pedidos/acoes";
+import {
+  numeroPedido,
+  reais,
+  rotuloPedido,
+  telefone as formatarTelefone,
+} from "@/lib/formato";
 import type {
   Adicional,
   Bairro,
@@ -16,6 +23,7 @@ import type {
   FormaPagamento,
   ItemCarrinho,
   Mesa,
+  Pedido,
   Produto,
   TipoPedido,
 } from "@/lib/tipos";
@@ -50,6 +58,7 @@ export function PainelPdv({
   mesas,
   ocupadas,
   mesaInicial,
+  pedidoEditando,
 }: {
   caixaId: number;
   categorias: Categoria[];
@@ -60,6 +69,11 @@ export function PainelPdv({
   mesas: Mesa[];
   ocupadas: number[];
   mesaInicial: number | null;
+  /**
+   * Quando vem preenchido, o PDV não está abrindo um pedido novo: está
+   * acrescentando itens a um que já existe — mesa, entrega ou retirada.
+   */
+  pedidoEditando: Pedido | null;
 }) {
   const router = useRouter();
   const [salvando, iniciarSalvamento] = useTransition();
@@ -69,8 +83,18 @@ export function PainelPdv({
   const [itens, setItens] = useState<ItemCarrinho[]>([]);
   const [produtoAberto, setProdutoAberto] = useState<Produto | null>(null);
 
-  const [tipo, setTipo] = useState<TipoPedido>("MESA");
-  const [mesaId, setMesaId] = useState<number | null>(mesaInicial);
+  /**
+   * Modo edição. Tudo que identifica o pedido — tipo, mesa, cliente,
+   * pagamento — já foi decidido quando ele nasceu e não se mexe aqui: o que
+   * esta tela faz é escolher produtos pra somar nele.
+   */
+  const editando = pedidoEditando !== null;
+  const itensAtuais = pedidoEditando?.itens_pedido ?? [];
+
+  const [tipo, setTipo] = useState<TipoPedido>(pedidoEditando?.tipo ?? "MESA");
+  const [mesaId, setMesaId] = useState<number | null>(
+    pedidoEditando?.mesa_id ?? mesaInicial,
+  );
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [nomeAvulso, setNomeAvulso] = useState("");
   const [buscaCliente, setBuscaCliente] = useState("");
@@ -99,8 +123,11 @@ export function PainelPdv({
   const carregado = useRef(false);
 
   useEffect(() => {
-    const r = lerRascunho();
     carregado.current = true;
+    // O rascunho é do pedido novo. Num pedido que já existe ele não entra:
+    // misturaria itens de um cliente no pedido de outro.
+    if (editando) return;
+    const r = lerRascunho();
     if (!r) return;
 
     setItens(r.itens);
@@ -117,17 +144,18 @@ export function PainelPdv({
       setCliente(atual);
     }
     setRestaurado(true);
-  }, [clientes]);
+  }, [clientes, editando]);
 
   // Veio de "Lançar pedido" numa mesa: a mesa manda, mesmo com rascunho antigo.
   useEffect(() => {
-    if (mesaInicial === null) return;
+    if (editando || mesaInicial === null) return;
     setTipo("MESA");
     setMesaId(mesaInicial);
-  }, [mesaInicial]);
+  }, [mesaInicial, editando]);
 
   useEffect(() => {
     if (!carregado.current) return; // não apagar o rascunho antes de lê-lo
+    if (editando) return;
     gravarRascunho({
       itens,
       tipo,
@@ -137,7 +165,7 @@ export function PainelPdv({
       forma,
       trocoTexto,
     });
-  }, [itens, tipo, mesaId, cliente, nomeAvulso, forma, trocoTexto]);
+  }, [itens, tipo, mesaId, cliente, nomeAvulso, forma, trocoTexto, editando]);
 
   function limparPedido() {
     setItens([]);
@@ -154,14 +182,21 @@ export function PainelPdv({
   const ocupada = new Set(ocupadas);
 
   const bairro = bairros.find((b) => b.id === cliente?.bairro_id) ?? null;
-  const taxa = tipo === "ENTREGA" ? Number(bairro?.taxa ?? 0) : 0;
+  // Editando, a taxa de entrega já foi cobrada no pedido: não entra de novo.
+  const taxa = !editando && tipo === "ENTREGA" ? Number(bairro?.taxa ?? 0) : 0;
 
-  const clienteNome = tipo === "ENTREGA" ? (cliente?.nome ?? "") : nomeAvulso;
-  const endereco = cliente
-    ? [cliente.endereco, cliente.numero].filter(Boolean).join(", ") +
-      (bairro ? ` — ${bairro.nome}` : "") +
-      (cliente.referencia ? ` (${cliente.referencia})` : "")
-    : "";
+  const clienteNome = editando
+    ? pedidoEditando.cliente_nome
+    : tipo === "ENTREGA"
+      ? (cliente?.nome ?? "")
+      : nomeAvulso;
+  const endereco = editando
+    ? (pedidoEditando.endereco_entrega ?? "")
+    : cliente
+      ? [cliente.endereco, cliente.numero].filter(Boolean).join(", ") +
+        (bairro ? ` — ${bairro.nome}` : "") +
+        (cliente.referencia ? ` (${cliente.referencia})` : "")
+      : "";
 
   const produtosFiltrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -246,6 +281,42 @@ export function PainelPdv({
     );
   }
 
+  /** O carrinho na forma que o servidor espera. Os preços são refeitos lá. */
+  function paraEnvio(i: ItemCarrinho): ItemEnviado {
+    return {
+      produto_id: i.produto_id,
+      // A outra metade da pizza. Sem esta linha o painel deixava escolher
+      // o segundo sabor, a comanda na tela mostrava os dois, e o servidor
+      // recebia pizza inteira — saia errado no cupom e na conta.
+      segundo_produto_id: i.segundo_produto_id ?? null,
+      variacao_id: i.variacao_id,
+      quantidade: i.quantidade,
+      observacao: i.observacao,
+      adicionais: i.adicionais.map((a) => ({
+        adicional_id: a.adicional_id,
+        quantidade: a.quantidade,
+      })),
+    };
+  }
+
+  /** De volta pra onde o pedido mora: a mesa dele, ou a tela do pedido. */
+  function voltarPraOPedido(id: number, mesa_id: number | null) {
+    router.push(mesa_id ? `/mesas/${mesa_id}` : `/imprimir/${id}`);
+  }
+
+  function acrescentar() {
+    if (!pedidoEditando) return;
+    setErro(null);
+    iniciarSalvamento(async () => {
+      const r = await acrescentarItens(pedidoEditando.id, itens.map(paraEnvio));
+      if (!r.ok) {
+        setErro(r.erro);
+        return;
+      }
+      voltarPraOPedido(pedidoEditando.id, pedidoEditando.mesa_id);
+    });
+  }
+
   function fecharPedido() {
     setErro(null);
     iniciarSalvamento(async () => {
@@ -265,20 +336,7 @@ export function PainelPdv({
             : null,
         desconto: 0,
         observacao: null,
-        itens: itens.map((i) => ({
-          produto_id: i.produto_id,
-          // A outra metade da pizza. Sem esta linha o painel deixava escolher
-          // o segundo sabor, a comanda na tela mostrava os dois, e o servidor
-          // recebia pizza inteira — saia errado no cupom e na conta.
-          segundo_produto_id: i.segundo_produto_id ?? null,
-          variacao_id: i.variacao_id,
-          quantidade: i.quantidade,
-          observacao: i.observacao,
-          adicionais: i.adicionais.map((a) => ({
-            adicional_id: a.adicional_id,
-            quantidade: a.quantidade,
-          })),
-        })),
+        itens: itens.map(paraEnvio),
       });
 
       if (!resultado.ok) {
@@ -287,17 +345,16 @@ export function PainelPdv({
       }
       // Pedido gravado: o rascunho cumpriu o papel e sai de cena.
       limparRascunho();
-      router.push(
-        resultado.mesa_id ? `/mesas/${resultado.mesa_id}` : `/imprimir/${resultado.pedido_id}`,
-      );
+      voltarPraOPedido(resultado.pedido_id, resultado.mesa_id);
     });
   }
 
   const podeFechar =
     itens.length > 0 &&
-    (ehMesa
-      ? mesaId !== null
-      : clienteNome.trim().length > 0 && (tipo === "RETIRADA" || Boolean(cliente)));
+    (editando ||
+      (ehMesa
+        ? mesaId !== null
+        : clienteNome.trim().length > 0 && (tipo === "RETIRADA" || Boolean(cliente))));
 
   return (
     <div className="flex h-[calc(100vh-3.25rem)] lg:h-screen">
@@ -306,15 +363,25 @@ export function PainelPdv({
         <header className="border-b border-borda px-6 py-4">
           <div className="mb-4 flex flex-wrap items-center gap-4">
             <h1 className="font-display text-2xl font-extrabold uppercase tracking-wide text-creme">
-              Novo pedido
+              {editando
+                ? `Acrescentar ao pedido ${numeroPedido(pedidoEditando.numero_dia)}`
+                : "Novo pedido"}
             </h1>
+            {editando && (
+              <span className="rounded-full bg-ouro/15 px-3 py-1 text-xs font-semibold text-ouro">
+                {rotuloPedido(pedidoEditando)}
+                {pedidoEditando.cliente_nome &&
+                  !pedidoEditando.cliente_nome.startsWith("Mesa ") &&
+                  ` · ${pedidoEditando.cliente_nome}`}
+              </span>
+            )}
             {itens.length > 0 && (
               <button
                 type="button"
                 onClick={limparPedido}
                 className="text-xs text-creme-fraco underline hover:text-cancelado"
               >
-                Limpar pedido
+                {editando ? "Limpar o que estou acrescentando" : "Limpar pedido"}
               </button>
             )}
             <input
@@ -402,6 +469,32 @@ export function PainelPdv({
             espaço: quem perde altura é a lista de itens, que rola de todo
             jeito. Em tela normal nada muda. */}
         <div className="max-h-[45vh] overflow-y-auto border-b border-borda p-4 [@media(max-height:820px)]:max-h-[62vh]">
+          {/*
+            Editando, este bloco deixa de perguntar o que já foi decidido e
+            passa a mostrar o pedido como ele está agora — com o − + e o ✕
+            valendo na hora. É o "editar" de verdade: dá pra corrigir
+            quantidade e tirar linha sem derrubar o pedido inteiro.
+          */}
+          {editando ? (
+            <>
+              <div className="mb-3 flex items-baseline justify-between gap-2">
+                <span className="rotulo mb-0">Já no pedido</span>
+                <span className="tabular text-sm text-creme-suave">
+                  {reais(Number(pedidoEditando.total))}
+                </span>
+              </div>
+              <ItensDoPedido
+                itens={itensAtuais}
+                aoFalhar={setErro}
+                aoMudar={() => router.refresh()}
+              />
+              <p className="mt-3 text-xs text-creme-fraco">
+                Toque nos produtos do cardápio pra acrescentar. O papel só sai quando você
+                mandar pra cozinha.
+              </p>
+            </>
+          ) : (
+            <>
           <div className="mb-3 grid grid-cols-3 gap-2">
             {TIPOS.map((t) => (
               <button
@@ -544,6 +637,8 @@ export function PainelPdv({
               aria-label="Nome do cliente"
             />
           )}
+            </>
+          )}
         </div>
 
         <Comanda
@@ -562,7 +657,11 @@ export function PainelPdv({
 
         {/* pagamento + fechar */}
         <div className="border-t border-borda p-4">
-          {ehMesa ? (
+          {editando ? (
+            <p className="mb-3 text-xs text-creme-fraco">
+              A forma de pagamento é a que o pedido já tem — acrescentar item não muda isso.
+            </p>
+          ) : ehMesa ? (
             <p className="mb-3 text-xs text-creme-fraco">
               Pedido de mesa entra na conta dela — o pagamento é no fechamento.
             </p>
@@ -620,15 +719,19 @@ export function PainelPdv({
             type="button"
             className="btn btn-ouro w-full py-4 text-base"
             disabled={!podeFechar || salvando}
-            onClick={fecharPedido}
+            onClick={editando ? acrescentar : fecharPedido}
           >
             {salvando
               ? "Salvando…"
-              : ehMesa
-                ? mesa
-                  ? `Lançar na mesa ${mesa.numero} · ${reais(total)}`
-                  : "Escolha a mesa"
-                : `Fechar pedido · ${reais(total)}`}
+              : editando
+                ? itens.length === 0
+                  ? "Escolha o que acrescentar"
+                  : `Acrescentar ${itens.length} ${itens.length === 1 ? "item" : "itens"} · ${reais(total)}`
+                : ehMesa
+                  ? mesa
+                    ? `Lançar na mesa ${mesa.numero} · ${reais(total)}`
+                    : "Escolha a mesa"
+                  : `Fechar pedido · ${reais(total)}`}
           </button>
         </div>
       </aside>

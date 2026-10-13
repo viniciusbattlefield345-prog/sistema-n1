@@ -674,6 +674,13 @@ function CartaoPedido({
                 Reimprimir
               </button>
             )}
+            {/* Acrescentar no pedido que já existe, em vez de abrir outro. */}
+            <Link
+              href={`/pdv?pedido=${pedido.id}`}
+              className="text-xs text-creme-suave underline hover:text-ouro"
+            >
+              Editar
+            </Link>
             <button
               type="button"
               onClick={aoCancelar}

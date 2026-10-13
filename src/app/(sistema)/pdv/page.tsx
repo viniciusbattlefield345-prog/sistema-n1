@@ -1,11 +1,30 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { PainelPdv } from "./PainelPdv";
-import type { Adicional, Bairro, Categoria, Cliente, Mesa, Produto } from "@/lib/tipos";
+import type {
+  Adicional,
+  Bairro,
+  Categoria,
+  Cliente,
+  Mesa,
+  Pedido,
+  Produto,
+} from "@/lib/tipos";
+
+export const revalidate = 0;
 
 export default async function PaginaPdv({ searchParams }: PageProps<"/pdv">) {
-  const { mesa } = await searchParams;
+  const { mesa, pedido } = await searchParams;
   const supabase = await criarClienteServidor();
+
+  /**
+   * `?pedido=<id>` abre o PDV em cima de um pedido que já existe, pra
+   * acrescentar o que o cliente pediu depois. Serve pra mesa, entrega e
+   * retirada: o cardápio é o mesmo, e é aqui que ele mora.
+   */
+  const alvoId =
+    typeof pedido === "string" && Number.isInteger(Number(pedido)) ? Number(pedido) : null;
 
   // O caixa precisa estar aberto pra vender — a regra vive no banco
   // (indice unico caixa_unico_aberto), aqui so consultamos.
@@ -66,6 +85,38 @@ export default async function PaginaPdv({ searchParams }: PageProps<"/pdv">) {
   const mesaInicial =
     typeof mesa === "string" && Number.isInteger(Number(mesa)) ? Number(mesa) : null;
 
+  let pedidoEditando: Pedido | null = null;
+  if (alvoId !== null) {
+    const { data } = await supabase
+      .from("pedidos")
+      .select("*, mesas(numero), itens_pedido(*, item_adicionais(*))")
+      .eq("id", alvoId)
+      .maybeSingle();
+    if (!data) notFound();
+    pedidoEditando = data as Pedido;
+
+    // Cancelado não recebe item: a volta é reabrir o pedido, e isso tem
+    // botão próprio. Dizer isso aqui é melhor que deixar salvar e falhar.
+    if (pedidoEditando.status === "CANCELADO")
+      return (
+        <div className="grid min-h-screen place-items-center p-8">
+          <div className="max-w-md rounded-2xl border border-borda bg-carvao p-10 text-center">
+            <span className="fita mb-5">Pedido cancelado</span>
+            <h1 className="mb-2 font-display text-2xl font-extrabold uppercase tracking-wide text-creme">
+              Reabra o pedido primeiro
+            </h1>
+            <p className="mb-7 text-sm text-creme-suave">
+              Esse pedido está cancelado e fora da conta. Reabra ele na tela de Pedidos e
+              depois volte pra acrescentar o que falta.
+            </p>
+            <Link href="/pedidos" className="btn btn-ouro w-full">
+              Ir para Pedidos
+            </Link>
+          </div>
+        </div>
+      );
+  }
+
   return (
     <PainelPdv
       caixaId={caixa.id}
@@ -77,6 +128,7 @@ export default async function PaginaPdv({ searchParams }: PageProps<"/pdv">) {
       mesas={(mesas ?? []) as Mesa[]}
       ocupadas={(contas ?? []).map((c) => c.mesa_id as number)}
       mesaInicial={mesaInicial}
+      pedidoEditando={pedidoEditando}
     />
   );
 }

@@ -3,13 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { usuarioAtual } from "@/lib/supabase/sessao";
+import { gravarItens, montarItens, type ItemEnviado } from "@/lib/pedido-servidor";
 
 export type Resultado = { ok: true } | { ok: false; erro: string };
 
 type Supabase = Awaited<ReturnType<typeof criarClienteServidor>>;
 
 function atualizarTelas() {
-  for (const tela of ["/pedidos", "/cozinha", "/caixa", "/mesas", "/entregas"]) {
+  for (const tela of ["/pedidos", "/cozinha", "/caixa", "/mesas", "/entregas", "/pdv"]) {
     revalidatePath(tela);
   }
   revalidatePath("/mesas/[id]", "page");
@@ -87,6 +88,107 @@ export async function cancelarPedido(id: number): Promise<Resultado> {
     .update({ status: "CANCELADO", atualizado_em: new Date().toISOString() })
     .eq("id", id);
 
+  if (error) return { ok: false, erro: error.message };
+
+  atualizarTelas();
+  return { ok: true };
+}
+
+/** Um pedido que já virou um cupom deste tamanho não é pedido, é confusão. */
+const MAX_LINHAS = 60;
+
+/**
+ * Acrescenta itens a um pedido que já existe.
+ *
+ * É o caso mais comum do balcão e não tinha solução: o cliente liga de volta
+ * e pede uma coca, ou lembra da batata quando já desligou. Antes disso, a
+ * única saída era cancelar o pedido inteiro e lançar tudo de novo — com a
+ * cozinha já trabalhando no resto.
+ *
+ * Vale pra mesa, entrega e retirada. Os preços vêm do banco, nunca do
+ * navegador, pelo mesmo caminho do pedido novo; os totais do pedido e da
+ * conta da mesa são refeitos pelos gatilhos.
+ *
+ * O papel não sai sozinho: se a cozinha precisa saber, quem manda é o
+ * atendente, pelo botão de sempre.
+ */
+export async function acrescentarItens(
+  pedidoId: number,
+  itens: ItemEnviado[],
+): Promise<Resultado> {
+  const supabase = await criarClienteServidor();
+  const user = await usuarioAtual(supabase);
+  if (!user) return { ok: false, erro: "Sessão expirada." };
+
+  const pode = await podeMexer(supabase, pedidoId);
+  if (!pode.ok) return pode;
+  if (pode.pedido.status === "CANCELADO")
+    return { ok: false, erro: "Esse pedido está cancelado. Reabra ele primeiro." };
+
+  const { count } = await supabase
+    .from("itens_pedido")
+    .select("id", { count: "exact", head: true })
+    .eq("pedido_id", pedidoId);
+  if ((count ?? 0) + itens.length > MAX_LINHAS)
+    return {
+      ok: false,
+      erro: `Esse pedido já tem ${count} itens. Lance os novos como um pedido separado.`,
+    };
+
+  const montagem = await montarItens(supabase, itens, false);
+  if (!montagem.ok) return montagem;
+
+  const gravado = await gravarItens(supabase, pedidoId, montagem.itens);
+  if (!gravado.ok) return gravado;
+
+  atualizarTelas();
+  return { ok: true };
+}
+
+/**
+ * Muda a quantidade ou a observação de um item que já está no pedido.
+ *
+ * Dois em vez de um, "sem cebola" que faltou. Sem isso, acertar a quantidade
+ * era tirar a linha e lançar de novo — e o preço voltava do cardápio de hoje,
+ * que pode não ser o preço que foi combinado com o cliente. Aqui o
+ * preco_unitario não é tocado de propósito.
+ */
+export async function editarItem(
+  itemId: number,
+  dados: { quantidade?: number; observacao?: string | null },
+): Promise<Resultado> {
+  const supabase = await criarClienteServidor();
+  const user = await usuarioAtual(supabase);
+  if (!user) return { ok: false, erro: "Sessão expirada." };
+
+  const { data: item } = await supabase
+    .from("itens_pedido")
+    .select("id, pedido_id")
+    .eq("id", itemId)
+    .maybeSingle();
+  if (!item) return { ok: false, erro: "Esse item já saiu do pedido." };
+
+  const pode = await podeMexer(supabase, item.pedido_id);
+  if (!pode.ok) return pode;
+  if (pode.pedido.status === "CANCELADO")
+    return { ok: false, erro: "Esse pedido está cancelado. Reabra ele primeiro." };
+
+  const mudancas: { quantidade?: number; observacao?: string | null } = {};
+
+  if (dados.quantidade !== undefined) {
+    const q = Math.trunc(Number(dados.quantidade));
+    if (!Number.isFinite(q) || q < 1)
+      return { ok: false, erro: "A quantidade tem que ser 1 ou mais. Pra tirar, use o ✕." };
+    if (q > 99) return { ok: false, erro: "Quantidade alta demais. Confira o número." };
+    mudancas.quantidade = q;
+  }
+
+  if (dados.observacao !== undefined)
+    mudancas.observacao = dados.observacao?.trim().slice(0, 120) || null;
+
+  if (Object.keys(mudancas).length === 0) return { ok: true };
+
+  const { error } = await supabase.from("itens_pedido").update(mudancas).eq("id", itemId);
   if (error) return { ok: false, erro: error.message };
 
   atualizarTelas();

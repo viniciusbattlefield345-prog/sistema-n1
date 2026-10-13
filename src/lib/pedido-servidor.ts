@@ -268,11 +268,35 @@ export async function gravarPedido(
   if (erroPedido || !pedido)
     return { ok: false, erro: erroPedido?.message ?? "Não consegui abrir o pedido." };
 
+  const itensOk = await gravarItens(sb, pedido.id, itens);
+  if (!itensOk.ok) {
+    await sb.from("pedidos").delete().eq("id", pedido.id);
+    return itensOk;
+  }
+
+  return { ok: true, id: pedido.id, numero_dia: pedido.numero_dia };
+}
+
+/**
+ * Grava as linhas de um pedido: os itens e os adicionais de cada um.
+ *
+ * Serve ao pedido que está nascendo e ao pedido que está crescendo — o
+ * cliente que pede mais uma coisa depois. Os totais não são calculados aqui:
+ * quem soma é o gatilho do banco, nos dois casos, pelo mesmo caminho.
+ *
+ * Se os adicionais falharem, as linhas que acabaram de entrar são apagadas:
+ * item sem o adicional que o cliente pediu sai errado na chapa e cobra menos.
+ */
+export async function gravarItens(
+  sb: SupabaseClient,
+  pedidoId: number,
+  itens: ItemMontado[],
+): Promise<{ ok: true } | Falha> {
   const { data: salvos, error: erroItens } = await sb
     .from("itens_pedido")
     .insert(
       itens.map((i) => ({
-        pedido_id: pedido.id,
+        pedido_id: pedidoId,
         produto_id: i.produto_id,
         variacao_id: i.variacao_id,
         segundo_produto_id: i.segundo_produto_id,
@@ -287,7 +311,11 @@ export async function gravarPedido(
     .select("id");
 
   if (erroItens || !salvos || salvos.length !== itens.length) {
-    await sb.from("pedidos").delete().eq("id", pedido.id);
+    if (salvos?.length)
+      await sb
+        .from("itens_pedido")
+        .delete()
+        .in("id", salvos.map((s) => s.id));
     return { ok: false, erro: erroItens?.message ?? "Não consegui salvar os itens." };
   }
 
@@ -304,12 +332,15 @@ export async function gravarPedido(
   if (linhasExtras.length > 0) {
     const { error } = await sb.from("item_adicionais").insert(linhasExtras);
     if (error) {
-      await sb.from("pedidos").delete().eq("id", pedido.id);
+      await sb
+        .from("itens_pedido")
+        .delete()
+        .in("id", salvos.map((s) => s.id));
       return { ok: false, erro: error.message };
     }
   }
 
-  return { ok: true, id: pedido.id, numero_dia: pedido.numero_dia };
+  return { ok: true };
 }
 
 /** A conta aberta da mesa; abre uma se não houver. `nova` diz se acabou de nascer. */
