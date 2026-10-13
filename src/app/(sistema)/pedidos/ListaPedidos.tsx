@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Cabecalho, Vazio } from "@/components/Cabecalho";
 import { FiltroPeriodo } from "@/components/FiltroPeriodo";
 import { useMensagens } from "@/components/Mensagens";
-import { cancelarPedido, descancelarPedido, removerItem } from "./acoes";
+import { apagarPedido, cancelarPedido, descancelarPedido, removerItem } from "./acoes";
 import { reabrirConta } from "../mesas/acoes";
 import { dataHora, extraComVezes, nomePagamento, numeroPedido, reais, rotuloPedido, telefone } from "@/lib/formato";
 import type { Periodo } from "@/lib/periodo";
@@ -116,6 +116,19 @@ export function ListaPedidos({
         confirmar: "Reabrir o pedido",
       },
       () => acao(() => descancelarPedido(p.id), "Pedido reaberto, está na fila da cozinha."),
+    );
+  }
+
+  function apagar(p: Pedido) {
+    pedir(
+      {
+        titulo: `Apagar o pedido ${numeroPedido(p.numero_dia)} do histórico?`,
+        texto:
+          "Ele sai de vez e não aparece mais em lugar nenhum. Como está cancelado, não muda nenhum total — mas também não dá pra recuperar depois.",
+        confirmar: "Apagar de vez",
+        perigo: true,
+      },
+      () => acao(() => apagarPedido(p.id), "Pedido apagado do histórico."),
     );
   }
 
@@ -328,6 +341,22 @@ export function ListaPedidos({
                             className="ml-4 text-xs text-pronto underline hover:text-pronto"
                           >
                             Reabrir pedido
+                          </button>
+                        )}
+                        {/*
+                          Lixo de teste some daqui. Só cancelado: ele já está
+                          fora de todo total, então apagar não mexe em número.
+                        */}
+                        {p.status === "CANCELADO" && ehDono && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              apagar(p);
+                            }}
+                            disabled={ocupado}
+                            className="ml-4 text-xs text-creme-fraco underline hover:text-cancelado"
+                          >
+                            Apagar
                           </button>
                         )}
                       </td>

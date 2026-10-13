@@ -98,6 +98,54 @@ export async function cancelarPedido(id: number): Promise<Resultado> {
 const MAX_LINHAS = 60;
 
 /**
+ * Apaga um pedido cancelado do histórico, de vez.
+ *
+ * Serve pra limpar o lixo: os testes de quando o sistema estava sendo
+ * aprendido, o pedido digitado em dobro. Só pedido CANCELADO, e é por isso
+ * que é seguro — cancelado já está fora de todo total, de todo relatório e
+ * de toda conta, então apagar não muda número nenhum. Pedido que valeu
+ * dinheiro continua sem poder ser apagado linha por linha: pra isso existe
+ * o "Zerar o movimento" em Configurações, que leva tudo junto e avisa.
+ *
+ * Só o dono. Os itens e os adicionais saem junto, pelo cascade do banco.
+ */
+export async function apagarPedido(id: number): Promise<Resultado> {
+  const supabase = await criarClienteServidor();
+  const user = await usuarioAtual(supabase);
+  if (!user) return { ok: false, erro: "Sessão expirada." };
+
+  const { data: perfil } = await supabase
+    .from("perfis")
+    .select("papel")
+    .eq("id", user.id)
+    .single();
+  if (perfil?.papel !== "dono")
+    return { ok: false, erro: "Só a dona pode apagar pedido do histórico." };
+
+  const { data: pedido } = await supabase
+    .from("pedidos")
+    .select("id, status")
+    .eq("id", id)
+    .maybeSingle();
+  if (!pedido) return { ok: false, erro: "Esse pedido já saiu do histórico." };
+  if (pedido.status !== "CANCELADO")
+    return {
+      ok: false,
+      erro: "Só pedido cancelado pode ser apagado. Cancele ele primeiro, ou use Zerar o movimento em Configurações.",
+    };
+
+  const { error } = await supabase
+    .from("pedidos")
+    .delete()
+    .eq("id", id)
+    .eq("status", "CANCELADO");
+  if (error) return { ok: false, erro: error.message };
+
+  atualizarTelas();
+  return { ok: true };
+}
+
+/**
  * Acrescenta itens a um pedido que já existe.
  *
  * É o caso mais comum do balcão e não tinha solução: o cliente liga de volta
