@@ -8,6 +8,20 @@ const MOEDA = new Intl.NumberFormat("pt-BR", {
 /** 12.5 -> "R$ 12,50" */
 export const reais = (v: number | null | undefined) => MOEDA.format(v ?? 0);
 
+/**
+ * O mesmo "R$ 12,50", mas que aceita dobrar a linha entre o simbolo e o
+ * numero.
+ *
+ * O Intl do pt-BR separa os dois com espaco inquebravel (U+00A0). Numa caixa
+ * estreita isso nao dobra: o texto sai por cima do vizinho. Foi assim que o
+ * movimento do caixa virou "R$ 36,5Q$ 258,00" na tela do balcao. Em caixa
+ * apertada, dobrar e feio; atropelar numero de dinheiro e defeito.
+ *
+ * So pra tela. No cupom a largura e fixa e quem quebra linha e o escpos.
+ */
+export const reaisQuebravel = (v: number | null | undefined) =>
+  reais(v).replace("\u00A0", " ");
+
 /** 12.5 -> "12,50" (sem simbolo, pra coluna do cupom) */
 export const numero = (v: number | null | undefined) =>
   (v ?? 0).toLocaleString("pt-BR", {

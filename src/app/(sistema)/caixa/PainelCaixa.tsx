@@ -4,7 +4,7 @@ import { Fragment, useState, useTransition } from "react";
 import { Cabecalho } from "@/components/Cabecalho";
 import { useMensagens } from "@/components/Mensagens";
 import { abrirCaixa, editarCaixa, fecharCaixa } from "./acoes";
-import { reais, numero, paraNumero, dataHora } from "@/lib/formato";
+import { reais, reaisQuebravel, numero, paraNumero, dataHora } from "@/lib/formato";
 import type { Caixa, FormaPagamento } from "@/lib/tipos";
 import type { ResumoPagamento } from "./page";
 
@@ -100,7 +100,13 @@ export function PainelCaixa({
           </p>
         </div>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
+        /*
+          Duas colunas so a partir de xl. Em lg (1024px) o cartao da esquerda
+          ficava com ~370px uteis — e o PC do balcao, a 125% de zoom, cai
+          justamente ai. Era pouco pra qualquer coisa, e o movimento do caixa
+          saia escrito por cima de si mesmo.
+        */
+        <div className="grid gap-6 xl:grid-cols-[1fr_22rem]">
           {/* movimento */}
           <div className="rounded-2xl border border-borda bg-carvao p-6">
             <div className="mb-5 flex items-baseline justify-between">
@@ -112,17 +118,32 @@ export function PainelCaixa({
               </span>
             </div>
 
-            <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {(Object.keys(ROTULO) as FormaPagamento[]).map((f) => (
-                <div key={f} className="rounded-xl border border-borda p-4">
-                  <p className="text-xs uppercase tracking-wide text-creme-fraco">
-                    {ROTULO[f]}
-                  </p>
-                  <p className="tabular mt-1 font-display text-xl text-creme">
-                    {reais(resumo[f])}
-                  </p>
-                </div>
-              ))}
+            {/*
+              Quatro lado a lado so quando CABEM quatro. Quem manda aqui e a
+              largura do CARTAO, nao a da janela — por isso @container e nao
+              sm:. Medido na fonte real: "R$ 1.258,00" ocupa 114px em text-lg e
+              102px em text-base, e o rotulo "CARTAO CREDITO" 100px. Com 44rem
+              de cartao cada caixinha fica com 135px uteis; abaixo disso, duas
+              por linha, que dao 130px ou mais. Sempre com folga, em qualquer
+              largura, porque numero de dinheiro nao pode sair cortado.
+            */}
+            <div className="@container mb-6">
+              <div className="grid grid-cols-2 gap-3 @[44rem]:grid-cols-4">
+                {(Object.keys(ROTULO) as FormaPagamento[]).map((f) => (
+                  <div
+                    key={f}
+                    className="flex min-w-0 flex-col rounded-xl border border-borda p-3 @[44rem]:p-4"
+                  >
+                    <p className="text-xs uppercase tracking-wide text-creme-fraco">
+                      {ROTULO[f]}
+                    </p>
+                    {/* mt-auto: rotulo de duas linhas nao pode desalinhar o dinheiro */}
+                    <p className="tabular mt-auto pt-1 font-display text-base leading-tight text-creme @[20rem]:text-lg @[52rem]:text-xl">
+                      {reaisQuebravel(resumo[f])}
+                    </p>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <dl className="space-y-2 text-sm">
@@ -146,13 +167,13 @@ export function PainelCaixa({
                     </button>
                   )}
                 </dt>
-                <dd className="tabular">{reais(Number(aberto.valor_abertura))}</dd>
+                <dd className="tabular shrink-0">{reais(Number(aberto.valor_abertura))}</dd>
               </div>
-              <div className="flex items-baseline justify-between border-t border-borda pt-3">
+              <div className="flex items-baseline justify-between gap-3 border-t border-borda pt-3">
                 <dt className="font-display text-lg uppercase tracking-wide text-creme">
                   Esperado na gaveta
                 </dt>
-                <dd className="tabular font-display text-2xl text-ouro">
+                <dd className="tabular shrink-0 font-display text-2xl text-ouro">
                   {reais(esperadoNaGaveta)}
                 </dd>
               </div>
@@ -482,9 +503,9 @@ function Correcao({
 
 function Linha({ rotulo, valor }: { rotulo: string; valor: number }) {
   return (
-    <div className="flex justify-between text-creme-suave">
-      <dt>{rotulo}</dt>
-      <dd className="tabular">{reais(valor)}</dd>
+    <div className="flex justify-between gap-3 text-creme-suave">
+      <dt className="min-w-0">{rotulo}</dt>
+      <dd className="tabular shrink-0">{reais(valor)}</dd>
     </div>
   );
 }
