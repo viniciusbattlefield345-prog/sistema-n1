@@ -3,6 +3,7 @@
 import { clienteServico } from "@/lib/supabase/admin";
 import { gravarPedido, montarItens, type ItemEnviado } from "@/lib/pedido-servidor";
 import type { FormaPagamento, StatusPedido, TipoPedido } from "@/lib/tipos";
+import { MOTIVO_CLIENTE_DESISTIU } from "@/lib/formato";
 
 /**
  * Ações do link público de tele-entrega.
@@ -289,4 +290,63 @@ export async function consultarPedidosEntrega(
       quantidade: Number(i.quantidade),
     })),
   }));
+}
+
+
+/**
+ * O cliente desiste do pedido de entrega que acabou de mandar.
+ *
+ * Mesma regra da mesa: só enquanto ninguém da equipe confirmou. Depois de
+ * aprovado o cupom já saiu e alguém está fritando — aí se resolve por
+ * telefone, não pelo botão.
+ *
+ * Aqui quem prova que o pedido é seu é o telefone guardado no celular, do
+ * mesmo jeito que o consultarPedidosEntrega.
+ */
+export async function cancelarMeuPedidoEntrega(
+  telefone: string,
+  pedidoId: number,
+): Promise<{ ok: true } | { ok: false; erro: string }> {
+  const id = Number(pedidoId);
+  if (!Number.isInteger(id)) return { ok: false, erro: "Pedido inválido." };
+
+  const tel = soDigitos(telefone);
+  if (tel.length < TELEFONE_MINIMO) return { ok: false, erro: "Telefone inválido." };
+
+  const sb = clienteServico();
+  const desde = new Date(Date.now() - 12 * 3600_000).toISOString();
+  const { data, error } = await sb
+    .from("pedidos")
+    .update({
+      status: "CANCELADO",
+      motivo_recusa: MOTIVO_CLIENTE_DESISTIU,
+      atualizado_em: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .eq("cliente_telefone", tel)
+    .eq("status", "AGUARDANDO")
+    // Só pedido que o próprio cliente mandou pelo link.
+    .eq("origem", "CLIENTE")
+    .gte("criado_em", desde)
+    .select("id")
+    .maybeSingle();
+
+  if (error) return { ok: false, erro: "Não consegui cancelar agora. Ligue pra lanchonete." };
+
+  if (!data) {
+    const { data: atual } = await sb
+      .from("pedidos")
+      .select("status")
+      .eq("id", id)
+      .eq("cliente_telefone", tel)
+      .maybeSingle();
+    if (!atual) return { ok: false, erro: "Esse pedido não é deste telefone." };
+    if (atual.status === "CANCELADO") return { ok: true };
+    return {
+      ok: false,
+      erro: "A lanchonete já confirmou esse pedido. Ligue pra lá pra trocar.",
+    };
+  }
+
+  return { ok: true };
 }

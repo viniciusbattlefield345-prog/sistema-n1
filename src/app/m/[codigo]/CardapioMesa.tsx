@@ -7,7 +7,7 @@ import { Folha, SAIDA_FOLHA } from "@/components/cardapio/Folha";
 import { ItensCarrinho } from "@/components/cardapio/ItensCarrinho";
 import { ListaCardapio } from "@/components/cardapio/ListaCardapio";
 import { MeusPedidos } from "@/components/cardapio/MeusPedidos";
-import { consultarPedidos, enviarPedido, type SituacaoPedido } from "./acoes";
+import { cancelarMeuPedido, consultarPedidos, enviarPedido, type SituacaoPedido } from "./acoes";
 import { curarCarrinho, numeroPedido, reais, subtotalCarrinho } from "@/lib/formato";
 import { gravar, ler } from "@/lib/memoria";
 import type { Adicional, Categoria, ItemCarrinho, Produto, StatusPedido } from "@/lib/tipos";
@@ -251,7 +251,16 @@ export function CardapioMesa({
         </div>
       )}
 
-      <MeusPedidos pedidos={meus} />
+      <MeusPedidos
+        pedidos={meus}
+        aoCancelar={async (id) => {
+          const r = await cancelarMeuPedido(mesa.codigo, id);
+          // Deu certo ou não, a lista relê do banco: é ela que diz a verdade
+          // sobre o pedido, não o que a tela achava um segundo atrás.
+          void atualizar();
+          return r;
+        }}
+      />
 
       <main className="px-4">
         <ListaCardapio produtos={produtos} categorias={categorias} aoEscolher={setEscolhendo} />

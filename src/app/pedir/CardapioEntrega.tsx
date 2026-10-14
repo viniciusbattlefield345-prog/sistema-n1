@@ -8,7 +8,7 @@ import { ItensCarrinho } from "@/components/cardapio/ItensCarrinho";
 import { ListaCardapio } from "@/components/cardapio/ListaCardapio";
 import { MeusPedidos } from "@/components/cardapio/MeusPedidos";
 import { PortaEntrega } from "./PortaEntrega";
-import { consultarPedidosEntrega, enviarPedidoEntrega, type SituacaoEntrega } from "./acoes";
+import { cancelarMeuPedidoEntrega, consultarPedidosEntrega, enviarPedidoEntrega, type SituacaoEntrega } from "./acoes";
 import {
   CLIENTE_VAZIO,
   dadosServem,
@@ -287,7 +287,14 @@ export function CardapioEntrega({
         </section>
       )}
 
-      <MeusPedidos pedidos={meus} />
+      <MeusPedidos
+        pedidos={meus}
+        aoCancelar={async (id) => {
+          const r = await cancelarMeuPedidoEntrega(cliente.telefone, id);
+          void atualizar();
+          return r;
+        }}
+      />
 
       <main className="px-4">
         <ListaCardapio produtos={produtos} categorias={categorias} aoEscolher={setEscolhendo} />

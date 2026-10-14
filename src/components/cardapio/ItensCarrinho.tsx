@@ -47,12 +47,20 @@ export function ItensCarrinho({
               >
                 +
               </Passo>
+              {/*
+                Tirar do pedido tem que ser tão fácil quanto colocar. Era um
+                link cinza de 12px no meio dos botões redondos — quem escolheu
+                errado não achava, e acabava chamando o atendente pra desfazer
+                um toque. Agora é botão, do tamanho do dedo, e com a cor de
+                quem desfaz.
+              */}
               <button
                 type="button"
                 onClick={() => aoRemover(i.chave)}
-                className="ml-2 text-xs text-creme-fraco underline"
+                aria-label={`Tirar ${i.produto_nome} do pedido`}
+                className="ml-auto rounded-lg border border-cancelado/40 px-3 py-2 text-xs font-semibold text-cancelado"
               >
-                Remover
+                Tirar
               </button>
             </div>
           </div>

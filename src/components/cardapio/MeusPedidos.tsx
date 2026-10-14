@@ -1,6 +1,7 @@
 "use client";
 
-import { numeroPedido, reais } from "@/lib/formato";
+import { useState } from "react";
+import { MOTIVO_CLIENTE_DESISTIU, numeroPedido, reais } from "@/lib/formato";
 import type { StatusPedido } from "@/lib/tipos";
 
 /** O que o cliente precisa saber do pedido dele. Nem preço de custo, nem id interno. */
@@ -29,8 +30,35 @@ const SITUACAO: Record<StatusPedido, { texto: string; cor: string }> = {
   CANCELADO: { texto: "Não foi aceito", cor: "text-cancelado" },
 };
 
-export function MeusPedidos({ pedidos }: { pedidos: PedidoAcompanhado[] }) {
+export function MeusPedidos({
+  pedidos,
+  aoCancelar,
+}: {
+  pedidos: PedidoAcompanhado[];
+  /**
+   * Desistir de um pedido que ainda não foi confirmado.
+   *
+   * Opcional de propósito: onde não for passado, a lista continua sendo só o
+   * acompanhamento que sempre foi.
+   */
+  aoCancelar?: (id: number) => Promise<{ ok: true } | { ok: false; erro: string }>;
+}) {
+  /** Qual pedido está com a pergunta aberta. Nunca cancela no primeiro toque. */
+  const [perguntando, setPerguntando] = useState<number | null>(null);
+  const [cancelando, setCancelando] = useState<number | null>(null);
+  const [erro, setErro] = useState<{ id: number; texto: string } | null>(null);
+
   if (pedidos.length === 0) return null;
+
+  async function cancelar(id: number) {
+    if (!aoCancelar) return;
+    setErro(null);
+    setCancelando(id);
+    const r = await aoCancelar(id);
+    setCancelando(null);
+    setPerguntando(null);
+    if (!r.ok) setErro({ id, texto: r.erro });
+  }
 
   return (
     <section aria-live="polite" className="mx-4 mt-3 rounded-2xl border border-borda bg-carvao p-4">
@@ -38,7 +66,18 @@ export function MeusPedidos({ pedidos }: { pedidos: PedidoAcompanhado[] }) {
         Seus pedidos
       </h2>
       <ul className="space-y-3">
-        {pedidos.map((p, indice) => (
+        {pedidos.map((p, indice) => {
+          /*
+            Cancelado por quem? "Não foi aceito" é o recado da recusa da
+            lanchonete. Quando quem desistiu foi o próprio cliente, dizer isso
+            pra ele seria mentira — e das que assustam.
+          */
+          const desistiu =
+            p.status === "CANCELADO" && p.motivo_recusa === MOTIVO_CLIENTE_DESISTIU;
+          const situacao = desistiu
+            ? { texto: "Você cancelou este pedido", cor: "text-creme-suave" }
+            : SITUACAO[p.status];
+          return (
           <li
             key={p.id}
             style={{ "--i": Math.min(indice, 5) } as React.CSSProperties}
@@ -49,24 +88,79 @@ export function MeusPedidos({ pedidos }: { pedidos: PedidoAcompanhado[] }) {
               <span className="tabular text-sm text-creme-suave">{reais(p.total)}</span>
             </div>
             <p
-              className={
-                "mt-0.5 flex items-center gap-1.5 text-sm font-semibold " + SITUACAO[p.status].cor
-              }
+              className={"mt-0.5 flex items-center gap-1.5 text-sm font-semibold " + situacao.cor}
             >
               {/* pedido ainda andando: o pontinho pisca pra mostrar que está vivo */}
               {!FINAIS.includes(p.status) && (
                 <span aria-hidden className="anim-batida size-1.5 shrink-0 rounded-full bg-current" />
               )}
-              {SITUACAO[p.status].texto}
+              {situacao.texto}
             </p>
-            {p.status === "CANCELADO" && p.motivo_recusa && (
+            {p.status === "CANCELADO" && p.motivo_recusa && !desistiu && (
               <p className="text-xs text-creme-suave">Motivo: {p.motivo_recusa}</p>
             )}
             <p className="mt-1 text-xs leading-snug text-creme-fraco">
               {p.itens.map((i) => `${i.quantidade}x ${i.nome}`).join(" · ")}
             </p>
+
+            {/*
+              Desistir enquanto dá.
+              Escolher errado é normal — toca no produto parecido, manda, e
+              dois segundos depois percebe. Enquanto ninguém da equipe
+              confirmou, nada foi impresso e nada entrou na conta: desfazer é
+              só desfazer. Depois de confirmado o botão some, porque aí o
+              papel já está na mão da cozinha e quem resolve é uma pessoa.
+            */}
+            {aoCancelar && p.status === "AGUARDANDO" && (
+              <div className="mt-2.5">
+                {perguntando === p.id ? (
+                  <div className="rounded-xl border border-borda bg-breu/60 p-3">
+                    <p className="text-xs leading-snug text-creme-suave">
+                      Cancelar o pedido {numeroPedido(p.numero_dia)}? Ele não vai pra cozinha e
+                      não entra na sua conta. Dá pra pedir de novo na hora.
+                    </p>
+                    <div className="mt-2.5 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPerguntando(null)}
+                        disabled={cancelando === p.id}
+                        className="btn btn-quieto flex-1 py-2.5 text-xs"
+                      >
+                        Deixa como está
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void cancelar(p.id)}
+                        disabled={cancelando === p.id}
+                        className="btn btn-perigo flex-1 py-2.5 text-xs"
+                      >
+                        {cancelando === p.id ? "Cancelando…" : "Sim, cancelar"}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setErro(null);
+                      setPerguntando(p.id);
+                    }}
+                    className="rounded-lg border border-borda px-3 py-2 text-xs font-semibold text-creme-suave"
+                  >
+                    Cancelar este pedido
+                  </button>
+                )}
+              </div>
+            )}
+
+            {erro?.id === p.id && (
+              <p role="alert" className="mt-2 text-xs font-semibold text-cancelado">
+                {erro.texto}
+              </p>
+            )}
           </li>
-        ))}
+          );
+        })}
       </ul>
     </section>
   );

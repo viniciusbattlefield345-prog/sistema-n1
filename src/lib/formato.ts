@@ -22,6 +22,17 @@ export const reais = (v: number | null | undefined) => MOEDA.format(v ?? 0);
 export const reaisQuebravel = (v: number | null | undefined) =>
   reais(v).replace("\u00A0", " ");
 
+/**
+ * Motivo gravado quando é o próprio cliente que desiste, antes de alguém
+ * confirmar.
+ *
+ * Mora aqui porque duas pontas precisam da MESMA frase: a ação que grava e a
+ * tela do cliente, que reconhece ela pra dizer "você cancelou" em vez de
+ * "não foi aceito" — ninguém gosta de ser informado de que a própria
+ * desistência foi uma recusa.
+ */
+export const MOTIVO_CLIENTE_DESISTIU = "Cancelado pelo cliente antes de confirmar";
+
 /** 12.5 -> "12,50" (sem simbolo, pra coluna do cupom) */
 export const numero = (v: number | null | undefined) =>
   (v ?? 0).toLocaleString("pt-BR", {
