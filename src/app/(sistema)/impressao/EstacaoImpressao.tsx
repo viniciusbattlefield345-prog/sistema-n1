@@ -231,12 +231,33 @@ export function EstacaoImpressao({
       .lt("atualizado_em", doisMinutosAtras)
       .then(() => carregarFila());
 
+    /**
+     * Batimento no título da janela.
+     *
+     * O vigia do PC do balcão só sabia olhar a conexão na porta 8181 — e
+     * socket aberto não quer dizer página viva. Em 14/10/2026 esta aba parou
+     * de rodar com o socket de pé: o vigia não viu nada de errado e quatro
+     * cupons ficaram quase três horas na fila.
+     *
+     * O título da janela o Windows lê de fora, sem credencial e sem API.
+     * Enquanto a hora aqui andar, esta página está viva; se ela congelar, o
+     * relógio congela junto e o vigia tem como saber.
+     */
+    const marcarVivo = () => {
+      const a = new Date();
+      const dois = (n: number) => String(n).padStart(2, "0");
+      document.title = `Impressao ${dois(a.getHours())}:${dois(a.getMinutes())}:${dois(a.getSeconds())}`;
+    };
+
     // Uma batida: garante o QZ e processa a fila. Nunca "pula a vez" —
     // ligarQz, quando dá certo, já chama processar no fim.
     const bater = () => {
+      marcarVivo();
       if (qzAtual.current !== "ligado") void ligarQz(true);
       else void processar();
     };
+
+    marcarVivo();
 
     // A internet do balcão oscila (e no começo veio de celular por USB).
     // Quando o socket do tempo real morre, o canal fica mudo e a tela

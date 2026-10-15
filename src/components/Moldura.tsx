@@ -75,7 +75,16 @@ export function Moldura({
 
       <main className="bg-breu lg:ml-[232px]">{children}</main>
 
-      {papel !== "cozinha" && <AvisoAguardando />}
+      {/*
+        Uma coluna só de avisos. A impressora vem em cima dos pedidos
+        esperando porque é o aviso que ninguém mais vai dar: pedido parado
+        aparece na tela de mesas, papel que não sai não aparece em lugar
+        nenhum — só no silêncio.
+      */}
+      <div className="nao-imprimir fixed right-3 top-[4.25rem] z-[45] flex flex-col items-end gap-2 lg:top-4">
+        <AvisoImpressao />
+        {papel !== "cozinha" && <AvisoAguardando />}
+      </div>
     </div>
   );
 }
@@ -148,7 +157,7 @@ function AvisoAguardando() {
   if (avisos.length === 0) return null;
 
   return (
-    <div className="nao-imprimir fixed right-3 top-[4.25rem] z-[45] flex flex-col items-end gap-2 lg:top-4">
+    <>
       {avisos.map((a) => (
         <Link
           key={a.chave}
@@ -162,6 +171,108 @@ function AvisoAguardando() {
           {a.texto} esperando
         </Link>
       ))}
-    </div>
+    </>
+  );
+}
+
+/**
+ * Cupom parado na fila: o aviso que faltava.
+ *
+ * Em 14/10/2026 a estação do balcão parou de consumir a fila às 18:44 e só
+ * voltou às 21:36. Três pedidos e uma conta ficaram esperando, e ninguém
+ * descobriu pelo sistema: descobriram pelo papel que não apareceu. A fila
+ * mora numa tela que ninguém olha, então o silêncio dela parecia sucesso.
+ *
+ * Agora o silêncio fala. Qualquer tela do sistema mostra, e apita uma vez.
+ */
+function AvisoImpressao() {
+  const [parados, setParados] = useState<{ quantos: number; minutos: number } | null>(null);
+  /** Já apitei por esta travada? Alarme que repete vira barulho ignorado. */
+  const apitou = useRef(false);
+  const caminho = usePathname();
+
+  useEffect(() => {
+    const soltarSom = prepararSom();
+    const supabase = criarClienteNavegador();
+    let vivo = true;
+
+    async function conferir() {
+      const { data } = await supabase
+        .from("fila_impressao")
+        .select("criado_em")
+        .in("status", ["PENDENTE", "IMPRIMINDO"])
+        .order("criado_em")
+        .limit(30);
+      if (!vivo) return;
+
+      const maisVelho = data?.[0];
+      if (!maisVelho) {
+        setParados(null);
+        apitou.current = false;
+        return;
+      }
+
+      // Do clique ao papel são 6 a 13 segundos. Um minuto e meio parado não
+      // é lentidão: é alguma coisa quebrada entre aqui e o papel.
+      const segundos = (Date.now() - new Date(maisVelho.criado_em).getTime()) / 1000;
+      if (segundos < 90) {
+        setParados(null);
+        apitou.current = false;
+        return;
+      }
+
+      if (!apitou.current) {
+        apitar();
+        apitou.current = true;
+      }
+      setParados({ quantos: data!.length, minutos: Math.floor(segundos / 60) });
+    }
+
+    void conferir();
+    const canal = supabase
+      .channel(`aviso-impressao-${Math.random().toString(36).slice(2)}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "fila_impressao" },
+        () => void conferir(),
+      )
+      .subscribe();
+    // O relógio aqui importa mais que o tempo real: o caso que este aviso
+    // existe pra pegar é justamente o de nada acontecer na tabela.
+    const relogio = setInterval(() => void conferir(), 10_000);
+    const aoVoltar = () => {
+      if (document.visibilityState === "visible") void conferir();
+    };
+    document.addEventListener("visibilitychange", aoVoltar);
+
+    return () => {
+      vivo = false;
+      clearInterval(relogio);
+      soltarSom();
+      document.removeEventListener("visibilitychange", aoVoltar);
+      void supabase.removeChannel(canal);
+    };
+  }, []);
+
+  // Na própria estação o aviso é ruído: a fila está na tela, com o motivo.
+  if (!parados || caminho === "/impressao") return null;
+
+  return (
+    <Link
+      href="/impressao"
+      className="flex max-w-[17rem] items-center gap-2.5 rounded-2xl bg-cancelado px-4 py-3 text-sm font-bold text-white shadow-lg shadow-black/60"
+    >
+      <span className="relative flex size-2.5 shrink-0">
+        <span className="absolute inline-flex size-full animate-ping rounded-full bg-white opacity-70" />
+        <span className="relative inline-flex size-2.5 rounded-full bg-white" />
+      </span>
+      <span className="leading-snug">
+        Nada saindo na impressora
+        <span className="block text-xs font-semibold text-white/85">
+          {parados.quantos} {parados.quantos === 1 ? "cupom parado" : "cupons parados"}
+          {parados.minutos > 0 ? ` há ${parados.minutos} min` : " agora"} · toque pra ver
+        </span>
+      </span>
+    </Link>
   );
 }
