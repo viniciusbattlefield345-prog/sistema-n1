@@ -737,6 +737,7 @@ function FecharConta({
   const [desconto, setDesconto] = useState("");
   const [linhas, setLinhas] = useState<LinhaPagamento[]>([{ forma: "Pix", valor: numero(total) }]);
   const [recebido, setRecebido] = useState("");
+  const [pessoas, setPessoas] = useState("2");
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, iniciar] = useTransition();
 
@@ -751,6 +752,32 @@ function FecharConta({
 
   function mudar(i: number, parte: Partial<LinhaPagamento>) {
     setLinhas((atual) => atual.map((l, j) => (j === i ? { ...l, ...parte } : l)));
+  }
+
+  /**
+   * Mesa cheia dividindo a conta: cada um paga a sua parte, do jeito dele.
+   *
+   * Dava pra fazer na mão, uma linha por vez — mas com 10 pessoas isso é
+   * dividir de cabeça na frente de 10 pessoas esperando, e ainda acertar os
+   * centavos, porque o sistema só fecha quando a soma bate exatamente.
+   *
+   * Conta em centavos inteiros, nunca em float: 847,00 em 3 dá 282,33 /
+   * 282,33 / 282,34, e os 282,3333 do float nunca somariam a conta.
+   */
+  function dividirIgual(quantas: number) {
+    const n = Math.min(Math.max(Math.floor(quantas) || 0, 2), 20);
+    const totalCent = Math.round(aPagar * 100);
+    const base = Math.floor(totalCent / n);
+    const sobra = totalCent - base * n;
+    const forma = linhas[0]?.forma ?? "Pix";
+    setLinhas(
+      Array.from({ length: n }, (_, i) => ({
+        forma,
+        // O centavo que sobra cai todo na primeira parte. Alguém tem que
+        // pagar ele, e um centavo não se divide em três.
+        valor: numero((i === 0 ? base + sobra : base) / 100),
+      })),
+    );
   }
 
   function confirmar() {
@@ -834,15 +861,48 @@ function FecharConta({
           </div>
         ))}
       </div>
-      <button
-        type="button"
-        className="mt-2 text-xs text-ouro underline"
-        onClick={() =>
-          setLinhas((a) => [...a, { forma: "Dinheiro", valor: falta > 0 ? numero(falta) : "" }])
-        }
-      >
-        Dividir em outra forma
-      </button>
+      <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <button
+          type="button"
+          className="text-xs text-ouro underline"
+          onClick={() =>
+            setLinhas((a) => [...a, { forma: "Dinheiro", valor: falta > 0 ? numero(falta) : "" }])
+          }
+        >
+          Somar mais um pagamento
+        </button>
+
+        <span aria-hidden className="text-xs text-creme-fraco">
+          ou
+        </span>
+
+        {/* A conta rachada igual é o caso de mesa cheia: um botão, e depois
+            cada linha vira a forma de quem está pagando aquela parte. */}
+        <span className="flex items-center gap-1.5 text-xs text-creme-fraco">
+          dividir igual entre
+          <input
+            className="campo w-14 px-2 py-1 text-center text-xs"
+            inputMode="numeric"
+            value={pessoas}
+            onChange={(e) => setPessoas(e.target.value.replace(/\D/g, "").slice(0, 2))}
+            aria-label="Quantas pessoas dividem a conta"
+          />
+          <button
+            type="button"
+            className="rounded-lg border border-ouro/50 px-2.5 py-1 text-xs font-semibold text-ouro"
+            onClick={() => dividirIgual(Number(pessoas))}
+          >
+            dividir
+          </button>
+        </span>
+      </div>
+
+      {linhas.length > 1 && (
+        <p className="mt-1.5 text-xs text-creme-fraco">
+          Cada linha pode ter a forma dela: um no Pix, outro no cartão, outro em
+          dinheiro. Só fecha quando a soma bate com a conta.
+        </p>
+      )}
 
       {emDinheiro > 0 && (
         <div className="mt-4">
