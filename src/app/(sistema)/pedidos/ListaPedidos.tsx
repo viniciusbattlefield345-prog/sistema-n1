@@ -295,10 +295,17 @@ export function ListaPedidos({
                             Editar
                           </Link>
                         )}
+                        {/*
+                          Amarelo como o "Editar" do lado, e não cinza: é por
+                          aqui que se escolhe QUAL via sai — a da cozinha, a do
+                          caixa ou as duas. Em cinza ninguém achava a porta, e
+                          a dúvida de "qual papel é esse" acabava virando
+                          reimpressão às cegas.
+                        */}
                         <Link
                           href={`/imprimir/${p.id}`}
                           onClick={(e) => e.stopPropagation()}
-                          className="ml-4 text-xs text-creme-suave underline hover:text-ouro"
+                          className="ml-4 text-xs font-semibold text-ouro underline hover:text-ouro"
                         >
                           Imprimir
                         </Link>

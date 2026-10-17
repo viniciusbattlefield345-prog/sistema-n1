@@ -692,7 +692,7 @@ function CartaoPedido({
               */
               <Link
                 href={`/imprimir/${pedido.id}`}
-                className="text-xs text-creme-suave underline hover:text-ouro"
+                className="text-xs font-semibold text-ouro underline hover:text-ouro"
               >
                 Imprimir
               </Link>
