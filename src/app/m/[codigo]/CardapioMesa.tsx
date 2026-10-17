@@ -6,7 +6,7 @@ import { EscolhaProduto } from "@/components/cardapio/EscolhaProduto";
 import { Folha, SAIDA_FOLHA } from "@/components/cardapio/Folha";
 import { ItensCarrinho } from "@/components/cardapio/ItensCarrinho";
 import { ListaCardapio } from "@/components/cardapio/ListaCardapio";
-import { MeusPedidos } from "@/components/cardapio/MeusPedidos";
+import { Acompanhamento } from "@/components/cardapio/Acompanhamento";
 import { cancelarMeuPedido, consultarPedidos, enviarPedido, type SituacaoPedido } from "./acoes";
 import { curarCarrinho, numeroPedido, reais, subtotalCarrinho } from "@/lib/formato";
 import { gravar, ler } from "@/lib/memoria";
@@ -59,6 +59,8 @@ export function CardapioMesa({
   const [erro, setErro] = useState<string | null>(null);
   const [confirmado, setConfirmado] = useState<number | null>(null);
   const [meus, setMeus] = useState<SituacaoPedido[]>([]);
+  /** A folha de acompanhamento. Abre pela faixa fixa ou pelo aviso de enviado. */
+  const [verPedidos, setVerPedidos] = useState(false);
   const [saindo, setSaindo] = useState<"carrinho" | "escolha" | null>(null);
   const [enviando, iniciar] = useTransition();
 
@@ -251,8 +253,11 @@ export function CardapioMesa({
         </div>
       )}
 
-      <MeusPedidos
+      <Acompanhamento
         pedidos={meus}
+        aberto={verPedidos}
+        aoAbrir={() => setVerPedidos(true)}
+        aoFechar={() => setVerPedidos(false)}
         aoCancelar={async (id) => {
           const r = await cancelarMeuPedido(mesa.codigo, id);
           // Deu certo ou não, a lista relê do banco: é ela que diz a verdade
@@ -283,15 +288,27 @@ export function CardapioMesa({
               Pedido {numeroPedido(confirmado)} enviado!
             </p>
             <p className="mt-1 text-sm text-creme-suave">
-              Assim que o atendente confirmar, ele vai pra cozinha. Acompanhe em “Seus pedidos”, lá em cima.
+              Assim que o atendente confirmar, ele vai pra cozinha.
             </p>
-            <button
-              type="button"
-              onClick={() => setConfirmado(null)}
-              className="btn btn-quieto mt-3 w-full py-2.5 text-sm"
-            >
-              Pedir mais alguma coisa
-            </button>
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmado(null);
+                  setVerPedidos(true);
+                }}
+                className="btn btn-ouro flex-1 py-2.5 text-sm"
+              >
+                Acompanhar
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmado(null)}
+                className="btn btn-quieto flex-1 py-2.5 text-sm"
+              >
+                Pedir mais
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -6,7 +6,7 @@ import { EscolhaProduto } from "@/components/cardapio/EscolhaProduto";
 import { Folha, SAIDA_FOLHA } from "@/components/cardapio/Folha";
 import { ItensCarrinho } from "@/components/cardapio/ItensCarrinho";
 import { ListaCardapio } from "@/components/cardapio/ListaCardapio";
-import { MeusPedidos } from "@/components/cardapio/MeusPedidos";
+import { Acompanhamento } from "@/components/cardapio/Acompanhamento";
 import { PortaEntrega } from "./PortaEntrega";
 import { cancelarMeuPedidoEntrega, consultarPedidosEntrega, enviarPedidoEntrega, type SituacaoEntrega } from "./acoes";
 import {
@@ -74,6 +74,8 @@ export function CardapioEntrega({
   const [erro, setErro] = useState<string | null>(null);
   const [confirmado, setConfirmado] = useState<number | null>(null);
   const [meus, setMeus] = useState<SituacaoEntrega[]>([]);
+  /** A folha de acompanhamento. Abre pela faixa fixa ou pelo aviso de enviado. */
+  const [verPedidos, setVerPedidos] = useState(false);
   const [enviando, iniciar] = useTransition();
 
   const carregou = useRef(false);
@@ -287,8 +289,11 @@ export function CardapioEntrega({
         </section>
       )}
 
-      <MeusPedidos
+      <Acompanhamento
         pedidos={meus}
+        aberto={verPedidos}
+        aoAbrir={() => setVerPedidos(true)}
+        aoFechar={() => setVerPedidos(false)}
         aoCancelar={async (id) => {
           const r = await cancelarMeuPedidoEntrega(cliente.telefone, id);
           void atualizar();
@@ -318,13 +323,25 @@ export function CardapioEntrega({
             <p className="mt-1 text-sm text-creme-suave">
               A loja vai confirmar em instantes. Acompanhe em “Seus pedidos”, lá em cima.
             </p>
-            <button
-              type="button"
-              onClick={() => setConfirmado(null)}
-              className="btn btn-quieto mt-3 w-full py-2.5 text-sm"
-            >
-              Pedir mais alguma coisa
-            </button>
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmado(null);
+                  setVerPedidos(true);
+                }}
+                className="btn btn-ouro flex-1 py-2.5 text-sm"
+              >
+                Acompanhar
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmado(null)}
+                className="btn btn-quieto flex-1 py-2.5 text-sm"
+              >
+                Pedir mais
+              </button>
+            </div>
           </div>
         </div>
       )}

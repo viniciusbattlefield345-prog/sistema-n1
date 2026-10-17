@@ -30,9 +30,52 @@ const SITUACAO: Record<StatusPedido, { texto: string; cor: string }> = {
   CANCELADO: { texto: "Não foi aceito", cor: "text-cancelado" },
 };
 
+/**
+ * O mesmo status em duas palavras.
+ *
+ * A faixa fixa que fica em cima do cardápio tem uma linha e meia tela de
+ * largura: "Esperando o atendente confirmar" não cabe junto com o número do
+ * pedido, e cortar frase no meio é pior que dizer curto.
+ */
+const CURTO: Record<StatusPedido, string> = {
+  AGUARDANDO: "esperando confirmar",
+  PENDENTE: "na fila da cozinha",
+  "EM PREPARO": "sendo preparado",
+  PRONTO: "pronto!",
+  "SAIU PARA ENTREGA": "saiu pra entrega",
+  CONCLUIDO: "entregue",
+  CANCELADO: "cancelado",
+};
+
+/**
+ * O andamento resumido numa linha, pra quem está longe da lista.
+ *
+ * Com mais de um pedido andando, escolher um deles pra mostrar seria esconder
+ * os outros — aí a linha conta quantos são e a lista completa fica a um toque.
+ */
+export function resumoPedidos(
+  pedidos: PedidoAcompanhado[],
+): { texto: string; andando: boolean } | null {
+  if (pedidos.length === 0) return null;
+
+  const andando = pedidos.filter((p) => !FINAIS.includes(p.status));
+  if (andando.length === 0)
+    return {
+      texto: pedidos.length === 1 ? "Seu pedido" : `Seus ${pedidos.length} pedidos`,
+      andando: false,
+    };
+  if (andando.length === 1)
+    return {
+      texto: `Pedido ${numeroPedido(andando[0].numero_dia)} · ${CURTO[andando[0].status]}`,
+      andando: true,
+    };
+  return { texto: `${andando.length} pedidos em andamento`, andando: true };
+}
+
 export function MeusPedidos({
   pedidos,
   aoCancelar,
+  semMoldura = false,
 }: {
   pedidos: PedidoAcompanhado[];
   /**
@@ -42,6 +85,11 @@ export function MeusPedidos({
    * acompanhamento que sempre foi.
    */
   aoCancelar?: (id: number) => Promise<{ ok: true } | { ok: false; erro: string }>;
+  /**
+   * Sem o cartão em volta nem o título: é a forma usada dentro da folha de
+   * acompanhamento, que já tem cabeçalho e fundo próprios.
+   */
+  semMoldura?: boolean;
 }) {
   /** Qual pedido está com a pergunta aberta. Nunca cancela no primeiro toque. */
   const [perguntando, setPerguntando] = useState<number | null>(null);
@@ -60,12 +108,8 @@ export function MeusPedidos({
     if (!r.ok) setErro({ id, texto: r.erro });
   }
 
-  return (
-    <section aria-live="polite" className="mx-4 mt-3 rounded-2xl border border-borda bg-carvao p-4">
-      <h2 className="mb-3 font-display text-xs font-bold uppercase tracking-[0.16em] text-creme-suave">
-        Seus pedidos
-      </h2>
-      <ul className="space-y-3">
+  const lista = (
+    <ul className="space-y-3">
         {pedidos.map((p, indice) => {
           /*
             Cancelado por quem? "Não foi aceito" é o recado da recusa da
@@ -161,7 +205,22 @@ export function MeusPedidos({
           </li>
           );
         })}
-      </ul>
+    </ul>
+  );
+
+  if (semMoldura)
+    return (
+      <div aria-live="polite">
+        {lista}
+      </div>
+    );
+
+  return (
+    <section aria-live="polite" className="mx-4 mt-3 rounded-2xl border border-borda bg-carvao p-4">
+      <h2 className="mb-3 font-display text-xs font-bold uppercase tracking-[0.16em] text-creme-suave">
+        Seus pedidos
+      </h2>
+      {lista}
     </section>
   );
 }
