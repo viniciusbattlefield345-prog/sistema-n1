@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { BarraLateral } from "./BarraLateral";
 import { Marca } from "./Marca";
 import { criarClienteNavegador } from "@/lib/supabase/client";
-import { apitar, prepararSom } from "@/lib/som";
+import { alarmar, apitar, prepararSom, somDestravado } from "@/lib/som";
 import type { Papel } from "@/lib/tipos";
 
 /**
@@ -82,12 +82,21 @@ export function Moldura({
         nenhum — só no silêncio.
       */}
       <div className="nao-imprimir fixed right-3 top-[4.25rem] z-[45] flex flex-col items-end gap-2 lg:top-4">
+        {/* em cima de todos: enquanto ele estiver ali, nenhum aviso faz som */}
+        <AvisoSomMudo />
         <AvisoImpressao />
         {papel !== "cozinha" && <AvisoAguardando />}
       </div>
     </div>
   );
 }
+
+/**
+ * De quanto em quanto tempo o alarme de pedido de casa volta a tocar
+ * enquanto ninguem aprova. Meio minuto incomoda o bastante pra ninguem
+ * esquecer, e pouco o bastante pra ninguem desligar o som por raiva.
+ */
+const INTERVALO_ALARME = 30_000;
 
 /**
  * Pedido esperando aprovação, em qualquer tela: o atendente pode estar no PDV
@@ -99,7 +108,14 @@ export function Moldura({
 function AvisoAguardando() {
   const [mesa, setMesa] = useState(0);
   const [entrega, setEntrega] = useState(0);
-  const anterior = useRef<number | null>(null);
+  const anterior = useRef<{ mesa: number; casa: number } | null>(null);
+  /**
+   * Quando o alarme de entrega tocou pela última vez.
+   *
+   * Zera quando a fila de casa esvazia, pra que o próximo pedido alarme na
+   * hora em vez de esperar o intervalo correr.
+   */
+  const ultimoAlarme = useRef(0);
   const caminho = usePathname();
 
   useEffect(() => {
@@ -115,11 +131,30 @@ function AvisoAguardando() {
       if (!vivo || !data) return;
 
       const deMesa = data.filter((p) => p.tipo === "MESA").length;
-      const total = data.length;
-      if (anterior.current !== null && total > anterior.current) apitar();
-      anterior.current = total;
+      const deCasa = data.length - deMesa;
+
+      /*
+        Pedido de casa: alarme alto, e ele VOLTA enquanto ninguém aprovar.
+        Um aviso que toca uma vez só serve pra quem estava olhando naquele
+        segundo — e é justamente o pedido de entrega que chega com a loja
+        cheia e o balcão de costas. Para sozinho quando alguém atende.
+      */
+      let alarmou = false;
+      if (deCasa === 0) {
+        ultimoAlarme.current = 0;
+      } else if (Date.now() - ultimoAlarme.current > INTERVALO_ALARME) {
+        alarmar();
+        ultimoAlarme.current = Date.now();
+        alarmou = true;
+      }
+
+      // Mesa continua no apito curto, e só quando entra um novo: o cliente
+      // está na casa, e o cartão aparece na tela de quem está atendendo.
+      if (!alarmou && anterior.current && deMesa > anterior.current.mesa) apitar();
+
+      anterior.current = { mesa: deMesa, casa: deCasa };
       setMesa(deMesa);
-      setEntrega(total - deMesa);
+      setEntrega(deCasa);
     }
 
     void contar();
@@ -172,6 +207,57 @@ function AvisoAguardando() {
         </Link>
       ))}
     </>
+  );
+}
+
+/**
+ * O navegador não deixa som nenhum tocar antes de alguém encostar na página.
+ *
+ * No celular isso se resolve sozinho: o primeiro toque na tela já libera, e
+ * ninguém usa o sistema sem tocar nele. No PC do balcão, não — a janela da
+ * impressão é aberta por tarefa agendada e passa o dia sem receber um clique.
+ * Ela estava pronta pra apitar desde sempre, e muda o tempo todo: conferido
+ * na máquina, o Chrome de lá sobe sem `--autoplay-policy`.
+ *
+ * Então o silêncio passa a ser visível. Um toque aqui resolve pro resto do
+ * dia, e o apito de volta confirma que resolveu — sem ele a pessoa toca, não
+ * ouve nada, e fica sem saber se funcionou.
+ */
+function AvisoSomMudo() {
+  const [mudo, setMudo] = useState(false);
+  const querConfirmar = useRef(false);
+
+  useEffect(() => {
+    if (somDestravado()) return;
+    setMudo(true);
+    return prepararSom(() => {
+      setMudo(false);
+      if (querConfirmar.current) apitar();
+    });
+  }, []);
+
+  if (!mudo) return null;
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        // O próprio clique destrava: prepararSom ouve o pointerdown. Aqui só
+        // fica marcado que esta pessoa quer ouvir a confirmação.
+        querConfirmar.current = true;
+      }}
+      className="flex max-w-[17rem] items-center gap-2.5 rounded-2xl border border-ouro bg-carvao px-4 py-3 text-left text-sm font-bold text-ouro shadow-lg shadow-black/60"
+    >
+      <span aria-hidden className="shrink-0 text-base">
+        🔇
+      </span>
+      <span className="leading-snug">
+        Sem som nesta tela
+        <span className="block text-xs font-semibold text-creme-suave">
+          o navegador trava o áudio até alguém tocar · toque aqui
+        </span>
+      </span>
+    </button>
   );
 }
 
