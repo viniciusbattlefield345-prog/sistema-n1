@@ -64,11 +64,39 @@ export async function aprovarPedido(id: number): Promise<Resultado> {
     .update({ status: "PENDENTE", aprovado_por: user.id, aprovado_em: agora, atualizado_em: agora })
     .eq("id", id)
     .eq("status", "AGUARDANDO")
-    .select("id")
+    .select("id, tipo")
     .maybeSingle();
 
   if (error) return { ok: false, erro: error.message };
   if (!data) return { ok: false, erro: "Esse pedido já foi aprovado ou recusado por outra pessoa." };
+
+  /**
+   * Entrega e retirada saem no papel na hora da aprovação.
+   *
+   * Na mesa o pedido cresce aos poucos e quem escolhe a hora de mandar pra
+   * chapa é o atendente, pelo botão "Mandar pra cozinha" — isso está certo e
+   * continua assim. Mas quando a comanda da mesa deixou de sair sozinha
+   * (13/10), a entrega foi junto sem querer, e ela não tem botão nenhum
+   * desses: o pedido de quem está em casa simplesmente parava de existir no
+   * papel. Medido no banco: cinco pedidos de entrega aprovados em 16 e
+   * 17/10 e nenhuma linha na fila de impressão para nenhum deles, enquanto o
+   * botão dizia "Aprovar e imprimir" e a tela respondia "saindo o cupom".
+   *
+   * É também o único papel que importa aqui: é nele que estão o endereço, o
+   * total e o troco que o entregador precisa levar na mão.
+   */
+  if (data.tipo !== "MESA") {
+    const r = await mandarImprimir(supabase, { tipo: "PEDIDO", pedido_id: data.id }, user.id);
+    if (!r.ok) {
+      // O pedido FOI aprovado; só o papel falhou. Dizer isso é melhor que
+      // "deu erro", que faria o atendente aprovar de novo e duplicar.
+      atualizarTelas();
+      return {
+        ok: false,
+        erro: `Pedido aprovado, mas o cupom não foi pra impressora: ${r.erro}`,
+      };
+    }
+  }
 
   atualizarTelas();
   return { ok: true };

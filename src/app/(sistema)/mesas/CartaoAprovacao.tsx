@@ -25,6 +25,20 @@ export function CartaoAprovacao({
   const rotulo = rotuloPedido(pedido);
   const nome = pedido.cliente_nome !== rotulo ? pedido.cliente_nome : null;
 
+  /*
+    Aprovar imprime? Depende de onde o pedido nasceu.
+
+    Entrega e retirada saem no papel na hora: o cliente está em casa e o
+    entregador precisa do endereço e do troco. Mesa não — ali o pedido
+    cresce aos poucos e quem escolhe a hora de mandar pra chapa é o
+    atendente, no botão "Mandar pra cozinha" da tela da mesa.
+
+    O botão dizia "Aprovar e imprimir" nos dois casos. Nos dois estava
+    errado por um motivo diferente: na mesa prometia papel que não vinha, e
+    na entrega prometia um papel que o sistema tinha parado de mandar.
+  */
+  const saiPapel = pedido.tipo !== "MESA";
+
   /**
    * O cartão responde na hora e o servidor trabalha atrás.
    *
@@ -140,7 +154,11 @@ export function CartaoAprovacao({
 
       {feito ? (
         <p className="mt-4 rounded-lg border border-borda bg-breu/60 px-3 py-2.5 text-sm font-semibold text-creme-suave">
-          {feito === "aprovado" ? "Aprovado · saindo o cupom" : "Recusado"}
+          {feito === "aprovado"
+            ? saiPapel
+              ? "Aprovado · saindo o cupom"
+              : "Aprovado · mande pra cozinha quando a mesa fechar o pedido"
+            : "Recusado"}
         </p>
       ) : recusando ? (
         <div className="mt-4 space-y-2.5">
@@ -195,7 +213,7 @@ export function CartaoAprovacao({
             onClick={aprovar}
             disabled={ocupado}
           >
-            {ocupado ? "Aprovando…" : "Aprovar e imprimir"}
+            {ocupado ? "Aprovando…" : saiPapel ? "Aprovar e imprimir" : "Aprovar pedido"}
           </button>
         </div>
       )}
