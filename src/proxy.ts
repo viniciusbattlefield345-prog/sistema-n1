@@ -13,7 +13,30 @@ const PUBLICAS = ["/login", "/auth"];
  * Essas rotas conversam com o banco pela chave de serviço, no servidor, e
  * conferem tudo por conta própria — é lá que mora a segurança delas.
  */
-const SEM_SESSAO = ["/m/", "/pedir", "/icon", "/apple-icon", "/opengraph-image"];
+const SEM_SESSAO = [
+  "/m/",
+  "/pedir",
+  "/icon",
+  "/apple-icon",
+  "/opengraph-image",
+  /*
+    O certificado do QZ Tray também não: ele é chave PÚBLICA, e já está no
+    código deste repositório, que é aberto. Esconder não protegia nada.
+
+    Protegia menos que nada, na verdade. A janela da impressão fica aberta
+    dias seguidos no balcão; quando a sessão dela expirava, esta rota
+    respondia a PÁGINA DE LOGIN com status 200, e o QZ recebia HTML no lugar
+    do certificado. Resultado medido em 18/10/2026: a conexão caiu por
+    inatividade às 15:51 e, daí em diante, 22 impressões chegaram "anônimas"
+    — cada uma parando a fila num aviso de segurança, e 4 acabaram negadas.
+    Cupom que não saiu.
+
+    Quem prova que o pedido é nosso é a ASSINATURA, feita em /api/qz/assinar
+    com a chave privada que só o servidor tem, e essa continua exigindo
+    sessão. Certificado sem assinatura não imprime nada.
+  */
+  "/api/qz/certificado",
+];
 
 export async function proxy(request: NextRequest) {
   const caminho = request.nextUrl.pathname;

@@ -31,19 +31,65 @@ async function carregar(): Promise<QzTray> {
  * Enquanto o servidor não tiver a chave, o certificado não é entregue e o QZ
  * volta ao modo antigo: imprime, mas pergunta.
  */
+/**
+ * Resposta 200 não quer dizer resposta certa.
+ *
+ * As rotas `/api/qz/*` exigem sessão. Quando a sessão da janela aberta no
+ * balcão expira, o proxy responde **a página de login, com status 200** — e
+ * o código antigo entregava esse HTML pro QZ como se fosse o certificado.
+ * O QZ não reconhecia aquilo, e em vez de um pedido anônimo limpo ele
+ * mostrava "Untrusted website" na cara de quem estava atendendo.
+ *
+ * Aconteceu em 17/10/2026 às 18:07, numa janela que estava aberta havia
+ * horas. Então agora o conteúdo é conferido: certificado tem que parecer
+ * certificado, e assinatura não pode vir em HTML.
+ */
+function pareceCertificado(texto: string): boolean {
+  return texto.includes("-----BEGIN CERTIFICATE-----");
+}
+
+function pareceHtml(texto: string): boolean {
+  return /^\s*<(!doctype|html)/i.test(texto);
+}
+
 function configurarAssinatura(q: QzTray) {
   q.security.setCertificatePromise((resolve) => {
     fetch("/api/qz/certificado", { cache: "no-store" })
-      .then(async (r) => resolve(r.ok ? await r.text() : undefined))
+      .then(async (r) => {
+        if (!r.ok) return resolve(undefined);
+        const texto = await r.text();
+        resolve(pareceCertificado(texto) ? texto : undefined);
+      })
       .catch(() => resolve(undefined));
   });
 
   q.security.setSignatureAlgorithm("SHA512");
   q.security.setSignaturePromise((mensagem) => (resolve) => {
     fetch("/api/qz/assinar", { method: "POST", body: mensagem, cache: "no-store" })
-      .then(async (r) => resolve(r.ok ? await r.text() : ""))
+      .then(async (r) => {
+        if (!r.ok) return resolve("");
+        const texto = await r.text();
+        resolve(pareceHtml(texto) ? "" : texto);
+      })
       .catch(() => resolve(""));
   });
+}
+
+/**
+ * O servidor está mesmo assinando as impressões deste computador?
+ *
+ * Serve pra tela poder avisar ANTES do papel: enquanto isto for falso, o QZ
+ * vai perguntar "permitir?" a cada cupom, e numa janela que ninguém olha
+ * isso quer dizer fila parada esperando um clique que não vem.
+ */
+export async function assinaturaAtiva(): Promise<boolean> {
+  try {
+    const r = await fetch("/api/qz/certificado", { cache: "no-store" });
+    if (!r.ok) return false;
+    return pareceCertificado(await r.text());
+  } catch {
+    return false;
+  }
 }
 
 export class ImpressoraIndisponivel extends Error {
