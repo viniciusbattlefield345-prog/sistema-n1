@@ -10,7 +10,9 @@ import { FormularioCliente } from "../clientes/FormularioCliente";
 import { salvarPedido, type ItemEnviado } from "./acoes";
 import { acrescentarItens } from "../pedidos/acoes";
 import {
+  centavos,
   numeroPedido,
+  paraNumero,
   reais,
   rotuloPedido,
   telefone as formatarTelefone,
@@ -104,6 +106,7 @@ export function PainelPdv({
 
   const [forma, setForma] = useState<FormaPagamento>("Dinheiro");
   const [trocoTexto, setTrocoTexto] = useState("");
+  const [descontoTexto, setDescontoTexto] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [restaurado, setRestaurado] = useState(false);
   const [clienteNovoId, setClienteNovoId] = useState<number | null>(null);
@@ -230,7 +233,25 @@ export function PainelPdv({
         i.quantidade,
     0,
   );
-  const total = Math.max(subtotal + taxa, 0);
+  /*
+    Desconto no lançamento, em qualquer tipo de pedido.
+
+    Este número ficava preso em zero aqui, e o único lugar do sistema com
+    campo de desconto era o fechamento da conta da mesa. Ou seja: entrega e
+    retirada não tinham onde dar desconto nenhum — era essa a tela que
+    faltava, e a dona avisou.
+
+    Acrescentando item a um pedido que já existe ele não aparece: o desconto
+    é do pedido inteiro e já foi dado quando ele nasceu; aplicar de novo
+    sobre o que está entrando agora cobraria errado.
+
+    A tela limita ao valor do pedido pra não existir total negativo, e o
+    servidor confere de novo — quem decide preço nunca é o navegador.
+  */
+  const valorDesconto = editando
+    ? 0
+    : centavos(Math.min(Math.max(paraNumero(descontoTexto), 0), subtotal + taxa));
+  const total = Math.max(centavos(subtotal + taxa - valorDesconto), 0);
   const troco = Math.max(Number(trocoTexto.replace(",", ".") || 0) - total, 0);
 
   function escolherProduto(produto: Produto) {
@@ -334,7 +355,7 @@ export function PainelPdv({
           forma === "Dinheiro" && trocoTexto
             ? Number(trocoTexto.replace(",", "."))
             : null,
-        desconto: 0,
+        desconto: valorDesconto,
         observacao: null,
         itens: itens.map(paraEnvio),
       });
@@ -648,7 +669,7 @@ export function PainelPdv({
           clienteNome={clienteNome}
           endereco={endereco}
           taxa={taxa}
-          desconto={0}
+          desconto={valorDesconto}
           acrescentandoA={
             pedidoEditando
               ? { numero_dia: pedidoEditando.numero_dia, total: Number(pedidoEditando.total) }
@@ -662,6 +683,41 @@ export function PainelPdv({
 
         {/* pagamento + fechar */}
         <div className="border-t border-borda p-4">
+          {/*
+            Desconto vem antes do pagamento de propósito: quem dá desconto
+            decide isso ANTES de escolher a forma e de contar o troco — e o
+            troco já é calculado em cima do total com desconto.
+          */}
+          {!editando && (
+            <div className="mb-3">
+              <label className="rotulo" htmlFor="pdv-desconto">
+                Desconto (opcional)
+              </label>
+              <div className="flex items-center gap-3">
+                <input
+                  id="pdv-desconto"
+                  className="campo"
+                  inputMode="decimal"
+                  value={descontoTexto}
+                  onChange={(e) => setDescontoTexto(e.target.value)}
+                  placeholder="0,00"
+                  aria-label="Desconto em reais"
+                />
+                {valorDesconto > 0 && (
+                  <span className="shrink-0 text-sm text-creme-suave">
+                    Fica <strong className="text-ouro">{reais(total)}</strong>
+                  </span>
+                )}
+              </div>
+              {ehMesa && valorDesconto > 0 && (
+                <p className="mt-1.5 text-xs text-creme-fraco">
+                  Vale só para este pedido. A conta da mesa tem o desconto
+                  dela no fechamento — cuidado pra não dar os dois.
+                </p>
+              )}
+            </div>
+          )}
+
           {editando ? (
             <p className="mb-3 text-xs text-creme-fraco">
               A forma de pagamento é a que o pedido já tem — acrescentar item não muda isso.

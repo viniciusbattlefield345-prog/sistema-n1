@@ -86,6 +86,26 @@ export async function salvarPedido(dados: PedidoEnviado): Promise<Resultado> {
     taxa = Number(bairro?.taxa ?? 0);
   }
 
+  /**
+   * O desconto é conferido aqui, e não só na tela.
+   *
+   * A tela já limita ao valor do pedido, mas quem chega por ela é um
+   * navegador — e preço nenhum deste sistema vem do navegador. Desconto
+   * maior que o pedido viraria total negativo, e total negativo entra no
+   * caixa como dinheiro que a lanchonete deve.
+   */
+  const valorItens = montagem.itens.reduce(
+    (s, i) =>
+      s +
+      (i.preco_unitario + i.adicionais.reduce((x, a) => x + a.preco * a.quantidade, 0)) *
+        i.quantidade,
+    0,
+  );
+  const desconto = Math.max(0, Number(dados.desconto) || 0);
+  // A folga de um centavo é pro arredondamento do float, não pra abuso.
+  if (desconto > valorItens + taxa + 0.01)
+    return { ok: false, erro: "O desconto é maior que o pedido." };
+
   const agora = new Date().toISOString();
   const resultado = await gravarPedido(
     supabase,
@@ -106,7 +126,7 @@ export async function salvarPedido(dados: PedidoEnviado): Promise<Resultado> {
             ? "RETIRADA NO BALCÃO"
             : null,
       taxa_entrega: taxa,
-      desconto: dados.desconto,
+      desconto,
       forma_pagamento: ehMesa ? null : dados.forma_pagamento,
       troco_para: !ehMesa && dados.forma_pagamento === "Dinheiro" ? dados.troco_para : null,
       status: "PENDENTE",
