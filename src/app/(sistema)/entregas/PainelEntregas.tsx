@@ -25,7 +25,7 @@ export function PainelEntregas({
   bairrosAtivos: number;
   caixaAberto: boolean;
 }) {
-  useAoVivo(["pedidos"], 10);
+  useAoVivo(["pedidos"]);
 
   const esperando = pedidos.filter((p) => p.status === "AGUARDANDO");
   const naCozinha = pedidos.filter((p) => p.status === "PENDENTE" || p.status === "EM PREPARO");

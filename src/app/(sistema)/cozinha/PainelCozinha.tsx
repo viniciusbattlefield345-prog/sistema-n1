@@ -39,7 +39,7 @@ export function PainelCozinha({ pedidos }: { pedidos: Pedido[] }) {
   const [erro, setErro] = useState<string | null>(null);
 
   // A cozinha não fica apertando F5: pedido aprovado aparece na hora.
-  useAoVivo(["pedidos"], 20);
+  useAoVivo(["pedidos"]);
 
   function avancar(id: number, status: StatusPedido) {
     setErro(null);

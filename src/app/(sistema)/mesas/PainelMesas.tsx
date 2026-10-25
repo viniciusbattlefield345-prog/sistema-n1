@@ -37,7 +37,7 @@ export function PainelMesas({
 }) {
   // 10s em vez dos 30s padrão: é a tela onde o atendente fica esperando
   // pedido, então ela não pode ficar meia dúzia de segundos atrás do apito.
-  useAoVivo(["pedidos", "comandas", "fila_impressao"], 10);
+  useAoVivo(["pedidos", "comandas", "fila_impressao"]);
 
   const ocupadas = mesas.filter((m) => m.comanda).length;
 
