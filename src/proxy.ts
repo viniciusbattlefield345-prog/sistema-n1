@@ -96,9 +96,27 @@ export async function proxy(request: NextRequest) {
   return resposta;
 }
 
+/*
+  O que nem chega a passar por aqui.
+
+  Este proxy roda numa funcao da Vercel, e funcao rodada e funcao cobrada.
+  Toda visita ao cardapio pagava duas: uma pro porteiro e outra pra pagina.
+  So que pras rotas de `SEM_SESSAO` o porteiro olhava, dava de ombros e
+  deixava passar na primeira linha — trabalho nenhum, cobrado como trabalho.
+  Metade do custo de cada cliente era isso.
+
+  A lista `SEM_SESSAO` continua la em cima de proposito, agora como segunda
+  tranca: se um dia alguem mexer neste filtro sem lembrar dela, o cardapio
+  continua abrindo. O preco de errar aqui e um cliente de mesa batendo numa
+  tela de login com o lanche na mao.
+
+  Conferido rota a rota antes de escrever: nenhuma tela de dentro colide com
+  esses prefixos. `pedidos` nao casa com `pedir` (muda na quinta letra) e
+  `mesas` nao casa com `m/`.
+*/
 export const config = {
   matcher: [
-    // tudo, menos arquivos estaticos e imagens
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    // tudo, menos estaticos, imagens e as rotas que abrem sem login
+    "/((?!_next/static|_next/image|favicon.ico|m/|pedir|icon|apple-icon|opengraph-image|api/qz/certificado|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

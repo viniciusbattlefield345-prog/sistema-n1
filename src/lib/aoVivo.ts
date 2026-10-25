@@ -30,6 +30,15 @@ import { criarClienteNavegador } from "@/lib/supabase/client";
  * que fala direto com o banco e não custa nada aqui). Esta folga só existe
  * pro caso de o tempo real ter caído sem avisar.
  */
+/**
+ * De quanto em quanto tempo conferir mesmo com o tempo real de pé.
+ *
+ * Socket vivo e mudo existe, então confiar 100% nele seria ingenuidade. Mas
+ * dez minutos é a frequência certa pra esse caso raro: o que acontece de
+ * verdade continua chegando pelo tempo real, em um segundo.
+ */
+const CONFERIDA_RARA = 10 * 60 * 1000;
+
 export function useAoVivo(tabelas: string[], folgaSegundos = 120) {
   const router = useRouter();
   const chave = tabelas.join(",");
@@ -37,27 +46,40 @@ export function useAoVivo(tabelas: string[], folgaSegundos = 120) {
   useEffect(() => {
     const supabase = criarClienteNavegador();
     let espera: ReturnType<typeof setTimeout> | null = null;
+    let ultimo = Date.now();
+    let tempoRealVivo = false;
 
     const recarregar = () => {
       if (espera) clearTimeout(espera);
-      espera = setTimeout(() => router.refresh(), 500);
+      espera = setTimeout(() => {
+        ultimo = Date.now();
+        router.refresh();
+      }, 500);
     };
 
     const canal = supabase.channel(`ao-vivo-${chave}-${Math.random().toString(36).slice(2)}`);
     for (const tabela of chave.split(",")) {
       canal.on("postgres_changes", { event: "*", schema: "public", table: tabela }, recarregar);
     }
-    canal.subscribe();
+    canal.subscribe((estado) => {
+      tempoRealVivo = estado === "SUBSCRIBED";
+    });
 
     const aoVoltar = () => {
       if (document.visibilityState === "visible") recarregar();
     };
     document.addEventListener("visibilitychange", aoVoltar);
-    // Aba escondida não recarrega: ninguém está lendo aquela tela, e o
-    // `visibilitychange` abaixo já põe tudo em dia no instante em que
-    // alguém volta pra ela.
     const relogio = setInterval(() => {
-      if (document.visibilityState === "visible") recarregar();
+      // Aba escondida não recarrega: ninguém está lendo aquela tela, e o
+      // `visibilitychange` acima já põe tudo em dia no instante em que
+      // alguém volta pra ela.
+      if (document.visibilityState !== "visible") return;
+      // E com o tempo real de pé, ele avisa de qualquer mudança em um
+      // segundo. Perguntar de novo a cada dois minutos é pagar pra ouvir a
+      // mesma resposta — foi essa pergunta repetida, numa aba que ninguém
+      // estava olhando, que derrubou a lanchonete em 25/10/2026.
+      if (tempoRealVivo && Date.now() - ultimo < CONFERIDA_RARA) return;
+      recarregar();
     }, folgaSegundos * 1000);
 
     return () => {
