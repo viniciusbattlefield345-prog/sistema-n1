@@ -720,7 +720,9 @@ export function PainelPdv({
 
           {editando ? (
             <p className="mb-3 text-xs text-creme-fraco">
-              A forma de pagamento é a que o pedido já tem — acrescentar item não muda isso.
+              A forma de pagamento é a que o pedido já tem — acrescentar item não muda
+              isso. Pra trocar (de PIX pra cartão, por exemplo), abra o pedido na tela
+              Pedidos.
             </p>
           ) : ehMesa ? (
             <p className="mb-3 text-xs text-creme-fraco">

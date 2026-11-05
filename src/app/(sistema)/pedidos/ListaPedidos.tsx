@@ -5,11 +5,26 @@ import Link from "next/link";
 import { Cabecalho, Vazio } from "@/components/Cabecalho";
 import { FiltroPeriodo } from "@/components/FiltroPeriodo";
 import { useMensagens } from "@/components/Mensagens";
-import { apagarPedido, cancelarPedido, descancelarPedido, removerItem } from "./acoes";
+import {
+  apagarPedido,
+  cancelarPedido,
+  descancelarPedido,
+  removerItem,
+  trocarFormaPagamento,
+} from "./acoes";
 import { reabrirConta } from "../mesas/acoes";
-import { dataHora, extraComVezes, nomePagamento, numeroPedido, reais, rotuloPedido, telefone } from "@/lib/formato";
+import {
+  dataHora,
+  extraComVezes,
+  FORMAS_PAGAMENTO,
+  nomePagamento,
+  numeroPedido,
+  reais,
+  rotuloPedido,
+  telefone,
+} from "@/lib/formato";
 import type { Periodo } from "@/lib/periodo";
-import type { ItemPedido, Pedido, StatusPedido } from "@/lib/tipos";
+import type { FormaPagamento, ItemPedido, Pedido, StatusPedido } from "@/lib/tipos";
 
 const COR: Record<StatusPedido, string> = {
   AGUARDANDO: "bg-ouro/20 text-ouro",
@@ -158,6 +173,20 @@ export function ListaPedidos({
         perigo: true,
       },
       () => acao(() => removerItem(item.id), "Item tirado do pedido."),
+    );
+  }
+
+  /**
+   * Um toque troca e o aviso diz o que ficou. Sem confirmação de propósito:
+   * a cliente mudar de ideia é rotina, e errar o botão se desfaz tocando o
+   * certo do lado — ao contrário de cancelar ou tirar item, que é o que
+   * pergunta antes.
+   */
+  function trocarPagamento(p: Pedido, forma: FormaPagamento) {
+    if (p.forma_pagamento === forma) return;
+    acao(
+      () => trocarFormaPagamento(p.id, forma),
+      `Pagamento do pedido ${numeroPedido(p.numero_dia)} agora é ${nomePagamento(forma)}.`,
     );
   }
 
@@ -423,6 +452,47 @@ export function ListaPedidos({
                               </li>
                             ))}
                           </ul>
+
+                          {/*
+                            A cliente combina PIX e dez minutos depois manda
+                            mensagem dizendo que vai de cartão. Fica aqui,
+                            dentro do pedido aberto, porque é onde ela já
+                            clica pra conferir o que foi pedido — era aqui
+                            que ela procurava e não achava.
+
+                            Mesa não aparece: mesa paga no fechamento da
+                            conta, e a forma fica no pagamento da conta.
+                          */}
+                          {p.tipo !== "MESA" && p.status !== "CANCELADO" && edicao.pode && (
+                            <div className="mt-4">
+                              <span className="rotulo">Pagamento</span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {FORMAS_PAGAMENTO.map((f) => (
+                                  <button
+                                    key={f}
+                                    type="button"
+                                    onClick={() => trocarPagamento(p, f)}
+                                    disabled={ocupado}
+                                    aria-pressed={p.forma_pagamento === f}
+                                    className={
+                                      "rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors " +
+                                      (p.forma_pagamento === f
+                                        ? "border-ouro bg-ouro/15 text-ouro"
+                                        : "border-borda text-creme-suave hover:border-borda-forte")
+                                    }
+                                  >
+                                    {nomePagamento(f)}
+                                  </button>
+                                ))}
+                              </div>
+                              {!p.forma_pagamento && (
+                                <p className="mt-1.5 text-xs text-creme-fraco">
+                                  Este pedido ficou sem forma de pagamento — escolha uma pro
+                                  caixa do dia bater.
+                                </p>
+                              )}
+                            </div>
+                          )}
 
                           {edicao.recado && (
                             <p className="mt-3 flex flex-wrap items-center gap-3 text-xs text-creme-fraco">

@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { usuarioAtual } from "@/lib/supabase/sessao";
 import { gravarItens, montarItens, type ItemEnviado } from "@/lib/pedido-servidor";
+import { FORMAS_PAGAMENTO } from "@/lib/formato";
+import type { FormaPagamento } from "@/lib/tipos";
 
 export type Resultado = { ok: true } | { ok: false; erro: string };
 
@@ -29,12 +31,15 @@ async function podeMexer(
   supabase: Supabase,
   pedidoId: number,
 ): Promise<
-  | { ok: true; pedido: { id: number; status: string; comanda_id: number | null } }
+  | {
+      ok: true;
+      pedido: { id: number; status: string; comanda_id: number | null; tipo: string };
+    }
   | { ok: false; erro: string }
 > {
   const { data: pedido } = await supabase
     .from("pedidos")
-    .select("id, status, comanda_id, caixa_id")
+    .select("id, status, comanda_id, caixa_id, tipo")
     .eq("id", pedidoId)
     .maybeSingle();
   if (!pedido) return { ok: false, erro: "Pedido não encontrado." };
@@ -327,6 +332,68 @@ export async function removerItem(itemId: number): Promise<Resultado> {
     };
 
   const { error } = await supabase.from("itens_pedido").delete().eq("id", itemId);
+  if (error) return { ok: false, erro: error.message };
+
+  atualizarTelas();
+  return { ok: true };
+}
+
+/**
+ * Troca a forma de pagamento de um pedido já lançado.
+ *
+ * A cliente pede pra pagar no PIX, o pedido é lançado no PIX e dez minutos
+ * depois ela manda mensagem dizendo que vai pagar no cartão. Isso não tinha
+ * conserto nenhum: o "Editar" nasceu pra acrescentar item e dizia, na própria
+ * tela, que a forma era a que o pedido já tinha. O caixa do dia ficava
+ * mostrando um PIX que nunca entrou, e a única saída era cancelar o pedido
+ * inteiro e lançar de novo — com a cozinha já trabalhando e o número do dia
+ * mudando.
+ *
+ * Nenhum total se mexe aqui: o valor do pedido continua o mesmo, só muda em
+ * qual coluna do caixa ele cai. Entrega e retirada guardam a forma no próprio
+ * pedido, então este update já acerta o caixa e o relatório. Mesa não entra:
+ * ela paga quando a conta fecha e a forma fica no pagamento da conta — lá o
+ * caminho é reabrir a conta e fechar de novo, que é só da dona.
+ *
+ * Vale enquanto o caixa do dia estiver aberto, pela mesma régua do resto
+ * (`podeMexer`). Depois de conferido, mexer aqui faria o relatório parar de
+ * bater com a gaveta sem ninguém descobrir pelo sistema.
+ */
+export async function trocarFormaPagamento(
+  id: number,
+  forma: FormaPagamento,
+): Promise<Resultado> {
+  const supabase = await criarClienteServidor();
+  const user = await usuarioAtual(supabase);
+  if (!user) return { ok: false, erro: "Sessão expirada." };
+
+  // Vem do navegador: o que não está na lista não chega no banco.
+  if (!FORMAS_PAGAMENTO.includes(forma))
+    return { ok: false, erro: "Forma de pagamento desconhecida." };
+
+  const pode = await podeMexer(supabase, id);
+  if (!pode.ok) return pode;
+  if (pode.pedido.status === "CANCELADO")
+    return { ok: false, erro: "Esse pedido está cancelado. Reabra ele primeiro." };
+  if (pode.pedido.tipo === "MESA")
+    return {
+      ok: false,
+      erro: "Pedido de mesa paga no fechamento da conta. Pra trocar a forma, reabra a conta na tela da mesa.",
+    };
+
+  const mudancas: {
+    forma_pagamento: FormaPagamento;
+    atualizado_em: string;
+    troco_para?: null;
+  } = { forma_pagamento: forma, atualizado_em: new Date().toISOString() };
+
+  /**
+   * Saindo do dinheiro, o troco vai junto. Senão a tela e o cupom continuam
+   * dizendo "levar R$ 20" num pedido que foi pago no cartão.
+   */
+  if (forma !== "Dinheiro") mudancas.troco_para = null;
+
+  const { error } = await supabase.from("pedidos").update(mudancas).eq("id", id);
   if (error) return { ok: false, erro: error.message };
 
   atualizarTelas();
