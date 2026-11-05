@@ -98,7 +98,7 @@ export function ListaCardapio({
                   ?.scrollIntoView({ behavior: "smooth", block: "start" })
               }
               className={
-                "shrink-0 rounded-full border px-4 py-2 text-sm font-semibold transition-colors " +
+                "shrink-0 rounded-full border px-4 py-2 text-sm font-semibold uppercase tracking-wide transition-colors " +
                 (ativa === s.id
                   ? "border-ouro bg-ouro text-black"
                   : "border-borda text-creme-suave")
